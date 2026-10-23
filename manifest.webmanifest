@@ -1,6 +1,6 @@
 {
-  "name": "트래블플랜",
-  "short_name": "트래블플랜",
+  "name": "여행일정",
+  "short_name": "여행일정",
   "description": "일별 여행 일정, 항공·공항 정보, 준비 체크리스트, PDF 내보내기",
   "lang": "ko",
   "start_url": "./",

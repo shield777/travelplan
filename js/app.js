@@ -1,4 +1,4 @@
-/* 트래블플랜 — 여행 일정 앱 (서버 없이 브라우저에 저장) */
+/* 여행일정 — 여행 일정 앱 (서버 없이 브라우저에 저장) */
 (function () {
   'use strict';
 
@@ -237,7 +237,7 @@
     app.innerHTML = `
       <div class="wrap">
         <header class="topbar">
-          <div class="grow brand">Travelplan<small>여행 일정</small></div>
+          <div class="grow brand">여행일정</div>
           <button class="btn sm" data-act="backup">백업</button>
           <button class="btn primary sm" data-act="new-trip">${ICON.plus}새 여행</button>
         </header>
@@ -722,7 +722,7 @@
       (root, close) => {
         $('#b-export', root).addEventListener('click', () => {
           const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-          deliverFile(blob, `travelplan-backup-${todayStr()}.json`);
+          deliverFile(blob, `여행일정-백업-${todayStr()}.json`);
         });
         $('#b-import', root).addEventListener('change', e => {
           const file = e.target.files[0]; if (!file) return;
@@ -737,7 +737,7 @@
                 if (i >= 0) { state.trips[i] = tr; updated++; } else { state.trips.push(tr); added++; }
               });
               save(); close(); render(); toast(`불러오기 완료 · 새 여행 ${added}개, 덮어쓴 여행 ${updated}개`);
-            } catch (err) { $('#b-msg', root).textContent = '이 파일은 트래블플랜 백업 파일이 아니에요.'; }
+            } catch (err) { $('#b-msg', root).textContent = '이 파일은 여행일정 백업 파일이 아니에요.'; }
           };
           r.readAsText(file);
         });
@@ -850,7 +850,7 @@
       h += `<h2>준비 체크리스트 (${list.filter(c => c.done).length}/${list.length})</h2>` + CATS.filter(c => list.some(x => (x.cat || '기타') === c)).map(c =>
         `<div class="r-block" style="margin-bottom:6px"><b style="font-size:12px;color:#5B6472">${esc(c)}</b><div class="r-check">${list.filter(x => (x.cat || '기타') === c).map(x => `<div><span class="bx">${x.done ? '☑' : '☐'}</span><span>${esc(x.text)}${dueDate(t, x) ? ` <span style="color:#5B6472">(${fmtD(dueDate(t, x))}까지)</span>` : ''}</span></div>`).join('')}</div></div>`).join('');
     }
-    h += `<div class="r-foot">트래블플랜 · ${todayStr()} 생성 · 게이트와 터미널은 출발 당일 공항·항공사 안내로 다시 확인하세요.</div>`;
+    h += `<div class="r-foot">여행일정 · ${todayStr()} 생성 · 게이트와 터미널은 출발 당일 공항·항공사 안내로 다시 확인하세요.</div>`;
     el.innerHTML = h;
     return el;
   }
