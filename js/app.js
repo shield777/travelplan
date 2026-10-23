@@ -365,6 +365,7 @@
           <button class="btn sm" data-act="backup">불러오기</button>
           <button class="btn primary sm" data-act="new-trip">${ICON.plus}새 여행</button>
         </header>
+        ${trips.some(x => x.example) ? `<div class="example-note"><span>예시 여행이 들어 있어요. 둘러본 뒤 지워도 돼요.</span><button class="btn sm" data-act="del-example">${ICON.trash}예시 지우기</button></div>` : ''}
         ${trips.length === 0 ? `<div class="empty">아직 여행이 없어요.<br>오른쪽 위 <b>새 여행</b>으로 연도·나라·여행지를 입력해 시작하세요.</div>` : ''}
         ${years.map(y => `
           <section class="year-group">
@@ -468,7 +469,7 @@
           <div class="info">
             <div class="date">${fmtDLong(d)}${d === today ? '<span class="today-tag">오늘</span>' : ''}</div>
             ${ro() ? (title ? `<div class="title">${esc(title)}</div>` : '')
-              : `<div class="title ${title ? '' : 'placeholder'}" data-act="day-title" data-date="${d}" role="button" tabindex="0">${title ? esc(title) : '이 날의 제목 (예: 교토 당일치기)'}</div>`}
+              : `<div class="title ${title ? '' : 'placeholder'}" data-act="day-title" data-date="${d}" role="button" tabindex="0">${title ? esc(title) : '이날의 제목'}</div>`}
           </div>
           ${money.byDate[d] ? `<div class="day-spent"><span>이날 경비</span><b class="num">${fmtNum(money.byDate[d])}원</b></div>` : ''}
         </div>
@@ -900,11 +901,21 @@
         const upd = () => { const y = val(root, 'f-year') || val(root, 'f-start').slice(0, 4); $('#f-name-preview', root).innerHTML = `여행 이름: <b>${esc([y, val(root, 'f-country'), val(root, 'f-city')].filter(Boolean).join(' · ') || '-')}</b>`; };
         root.addEventListener('input', upd); upd();
         $('#f-start', root).addEventListener('change', () => { const s = val(root, 'f-start'), e = $('#f-end', root); if (s && (!e.value || e.value < s)) e.value = s; });
-        $('#f-del', root)?.addEventListener('click', () => {
-          close();
-          confirmSheet(`'${tripName(t)}' 여행을 삭제할까요? 일정·항공편·체크리스트가 모두 지워져요.`, '삭제', () => {
-            state.trips = state.trips.filter(x => x.id !== t.id); ui.view = 'home'; save(); render(); toast('여행을 삭제했어요');
-          });
+        // 창을 바꾸지 않고 같은 버튼을 한 번 더 눌러 확인해요 (아이폰에서 창 전환 중 터치가 사라지는 문제 방지)
+        let armed = false, armTimer;
+        $('#f-del', root)?.addEventListener('click', ev => {
+          ev.preventDefault();
+          const btn = ev.currentTarget;
+          if (!armed) {
+            armed = true;
+            btn.classList.add('armed'); btn.textContent = '한 번 더 누르면 삭제';
+            $('#f-err', root).textContent = `'${tripName(t)}'의 일정·항공편·숙소·체크리스트·경비가 모두 지워져요.`;
+            clearTimeout(armTimer);
+            armTimer = setTimeout(() => { armed = false; btn.classList.remove('armed'); btn.innerHTML = `${ICON.trash}여행 삭제`; $('#f-err', root).textContent = ''; }, 5000);
+            return;
+          }
+          clearTimeout(armTimer);
+          deleteTrips(x => x.id === t.id); close(); toast('여행을 삭제했어요');
         });
         $('#sheet-form', root).addEventListener('submit', e => {
           e.preventDefault();
@@ -921,6 +932,12 @@
           save(); close(); render(); toast('저장했어요');
         });
       });
+  }
+
+  function deleteTrips(match) {
+    state.trips = state.trips.filter(x => !match(x));
+    if (!state.trips.some(x => x.id === ui.tripId)) { ui.tripId = null; ui.view = 'home'; }
+    save(); render(); window.scrollTo(0, 0);
   }
 
   // 일정 항목
@@ -1614,6 +1631,7 @@
       case 'close-shared': closeShared(); break;
       case 'copy-shared': copyText(sharedLink); break;
       case 'new-trip': tripSheet(null); break;
+      case 'del-example': deleteTrips(x => x.example); toast('예시 여행을 지웠어요'); break;
       case 'backup': backupSheet(); break;
       case 'open-trip': ui.tripId = id; ui.view = 'trip'; ui.tab = ui.tab || 'plan'; render(); window.scrollTo(0, 0); break;
       case 'home': ui.view = 'home'; render(); window.scrollTo(0, 0); break;
