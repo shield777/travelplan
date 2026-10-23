@@ -74,12 +74,12 @@
   const mapUrl = q => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
   const naverUrl = q => `https://map.naver.com/p/search/${encodeURIComponent(q)}`;
   // 일정 장소는 국내 여행이면 네이버지도, 해외 여행이면 구글맵으로 열어요
-  // app: 아이폰 지도 앱을 바로 여는 주소, web: 앱이 없을 때 쓰는 웹 지도
+  // 아이폰 지도 앱을 바로 여는 주소
   const placeMap = (t, q) => {
     const e = encodeURIComponent(q);
     return isDomestic(t)
-      ? { app: `nmap://search?query=${e}&appname=${encodeURIComponent(NAV_APPNAME)}`, web: naverUrl(q), label: '네이버지도' }
-      : { app: `comgooglemaps://?q=${e}`, web: mapUrl(q), label: '구글맵' };
+      ? { app: `nmap://search?query=${e}&appname=${encodeURIComponent(NAV_APPNAME)}`, label: '네이버지도' }
+      : { app: `comgooglemaps://?q=${e}`, label: '구글맵' };
   };
 
   // ── 돈 계산
@@ -480,7 +480,7 @@
         <div class="tl-card" ${ro() ? '' : `data-act="edit-item" data-id="${i.id}" role="button" tabindex="0"`}>
           <div class="tl-type">${ICON[i.type] || ICON.etc}${TYPE_LABEL[i.type] || '기타'}</div>
           <div class="tl-title">${esc(i.title)}</div>
-          ${map ? `<div class="tl-place"><a href="${esc(map.app)}" data-stop="1">${esc(i.place)} ↗</a><span class="map-tag">${map.label} 앱</span><a class="map-web" href="${esc(map.web)}" target="_blank" rel="noopener" data-stop="1">웹</a></div>` : ''}
+          ${map ? `<div class="tl-place"><a href="${esc(map.app)}" data-stop="1">${esc(i.place)} ↗</a><span class="map-tag">${map.label} 앱</span></div>` : ''}
           ${i.memo ? `<div class="tl-memo">${esc(i.memo)}</div>` : ''}
           ${i.cost ? `<div class="tl-cost">${esc(i.cost)}</div>` : ''}
           ${sp ? `<div class="tl-spent num">${fmtNum(sp.krw)}원${foreign ? ` <small>(${esc(foreign)})</small>` : ''}</div>` : ''}
@@ -557,7 +557,6 @@
       <a class="btn sm" href="kakaomap://search?q=${e}">카카오맵</a>
       <a class="btn sm" href="tmap://search?name=${e}" data-copy="${esc(q)}">티맵</a>
       <a class="btn sm" href="nmap://search?query=${e}&amp;appname=${encodeURIComponent(NAV_APPNAME)}">네이버</a>
-      <a class="nav-web" href="${naverUrl(q)}" target="_blank" rel="noopener">웹지도 ↗</a>
     </div>`;
   }
   function parkingBlock(f, ap, side, term, isKr) {
