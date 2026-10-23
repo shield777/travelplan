@@ -73,6 +73,8 @@
   const isDomestic = trip => /한국|대한민국|korea/i.test(trip.country || '');
   const mapUrl = q => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
   const naverUrl = q => `https://map.naver.com/p/search/${encodeURIComponent(q)}`;
+  // 일정 장소는 국내 여행이면 네이버지도, 해외 여행이면 구글맵으로 열어요
+  const placeMap = (t, q) => isDomestic(t) ? { url: naverUrl(q), label: '네이버지도' } : { url: mapUrl(q), label: '구글맵' };
 
   // ── 돈 계산
   const fmtNum = (n, d = 0) => Number(n).toLocaleString('ko-KR', { maximumFractionDigits: d, minimumFractionDigits: 0 });
@@ -437,7 +439,7 @@
     return `
       ${days.map((d, i) => daySection(t, d, i, today, money)).join('')}
       ${outside.length ? `<section class="day"><div class="day-head"><div class="info"><div class="title">여행 기간 밖 일정</div><div class="date">날짜를 바꾸면 해당 일차로 옮겨져요</div></div></div>
-        <ul class="timeline">${outside.map(i => itemRow(i, true, money)).join('')}</ul></section>` : ''}`;
+        <ul class="timeline">${outside.map(i => itemRow(i, true, money, t)).join('')}</ul></section>` : ''}`;
   }
 
   function daySection(t, d, i, today, money) {
@@ -454,14 +456,15 @@
           </div>
           ${money.byDate[d] ? `<div class="day-spent"><span>이날 경비</span><b class="num">${fmtNum(money.byDate[d])}원</b></div>` : ''}
         </div>
-        ${entries.length ? `<ul class="timeline">${entries.map(e => e.kind === 'item' ? itemRow(e.i, false, money) : flightRow(e.f, e.kind === 'arrive')).join('')}</ul>` : ''}
+        ${entries.length ? `<ul class="timeline">${entries.map(e => e.kind === 'item' ? itemRow(e.i, false, money, t) : flightRow(e.f, e.kind === 'arrive')).join('')}</ul>` : ''}
         ${ro() ? (entries.length ? '' : '<div class="note-small" style="padding-top:8px">일정 없음</div>') : `<div class="add-row" ${entries.length ? '' : 'style="padding-left:0"'}>
           <button class="btn sm" data-act="add-item" data-date="${d}">${ICON.plus}일정 추가</button>
         </div>`}
       </section>`;
   }
 
-  function itemRow(i, showDate, money) {
+  function itemRow(i, showDate, money, t) {
+    const map = i.place ? placeMap(t, i.place) : null;
     const sp = money && money.byItem[i.id];
     const foreign = sp ? Object.entries(sp.cur).filter(([c]) => c !== 'KRW').map(([c, a]) => fmtMoney(a, c)).join(' + ') : '';
     return `
@@ -471,7 +474,7 @@
         <div class="tl-card" ${ro() ? '' : `data-act="edit-item" data-id="${i.id}" role="button" tabindex="0"`}>
           <div class="tl-type">${ICON[i.type] || ICON.etc}${TYPE_LABEL[i.type] || '기타'}</div>
           <div class="tl-title">${esc(i.title)}</div>
-          ${i.place ? `<div class="tl-place"><a href="${mapUrl(i.place)}" target="_blank" rel="noopener" data-stop="1">${esc(i.place)} ↗</a></div>` : ''}
+          ${map ? `<div class="tl-place"><a href="${map.url}" target="_blank" rel="noopener" data-stop="1">${esc(i.place)} ↗</a><span class="map-tag">${map.label}</span></div>` : ''}
           ${i.memo ? `<div class="tl-memo">${esc(i.memo)}</div>` : ''}
           ${i.cost ? `<div class="tl-cost">${esc(i.cost)}</div>` : ''}
           ${sp ? `<div class="tl-spent num">${fmtNum(sp.krw)}원${foreign ? ` <small>(${esc(foreign)})</small>` : ''}</div>` : ''}
@@ -795,7 +798,7 @@
         <label class="field"><span>시작</span><input type="time" id="f-time" value="${esc(item.time)}"></label>
         <label class="field"><span>끝 <span class="hint">(선택)</span></span><input type="time" id="f-end" value="${esc(item.endTime)}"></label>
       </div>
-      <label class="field"><span>장소 <span class="hint">지도 링크로 연결돼요</span></span><input type="text" id="f-place" value="${esc(item.place)}" placeholder="예: Kiyomizu-dera"></label>
+      <label class="field"><span>장소 · 주소 <span class="hint">${isDomestic(t) ? '국내 여행이라 네이버지도로 연결돼요' : '해외 여행이라 구글맵으로 연결돼요'}</span></span><input type="text" id="f-place" value="${esc(item.place)}" placeholder="${isDomestic(t) ? '예: 제주 애월읍 애월해안로 272' : '예: Kiyomizu-dera 또는 현지 주소'}"></label>
       <label class="field"><span>메모</span><textarea id="f-memo">${esc(item.memo)}</textarea></label>
       ${item.cost ? `<label class="field"><span>비용 메모 <span class="hint">(이전 방식 · 합계에는 안 들어가요)</span></span><input type="text" id="f-cost" value="${esc(item.cost)}"></label>` : ''}
       ${isNew ? '<div class="note-small">저장한 뒤 일정 카드의 <b>+경비</b>로 쓴 돈을 넣을 수 있어요.</div>' : `<div class="field"><span>이 일정의 경비</span>
