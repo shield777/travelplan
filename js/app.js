@@ -536,7 +536,8 @@
     const fs = sortFlights(t.flights || []);
     const seen = new Set();
     return `
-      <div class="section-title"><h2>항공편</h2>${ro() ? '' : `<button class="btn primary sm" data-act="add-flight">${ICON.plus}항공편 추가</button>`}</div>
+      <div class="section-title"><h2>항공편</h2>${ro() ? '' : `<button class="btn sm" data-act="add-exp-sec" data-cat="flight">${ICON.plus}비용</button><button class="btn primary sm" data-act="add-flight">${ICON.plus}항공편 추가</button>`}</div>
+      ${sectionCost(t, 'flight', fs, '항공')}
       <div class="info-note">편명과 출발·도착 공항 코드를 넣으면 공항 이름, 터미널(추정), 시차, 비행시간, 주차장, 지도 링크가 자동으로 나와요. 발권 카운터와 게이트는 출발 당일 정해지므로 카드의 <b>실시간 확인</b> 버튼으로 찾아 넣으세요.</div>
       ${fs.length ? fs.map(f => flightCard(t, f, seen)).join('') : `<div class="empty">등록된 항공편이 없어요.</div>`}`;
   }
@@ -668,6 +669,19 @@
   }
 
   // 항공편·숙소에 연결된 비용
+  // 항공·숙박 탭 위쪽 합계: 그 분류의 비용 + 항공편·숙소에 연결된 비용
+  function sectionCost(t, cat, refs, label) {
+    const ids = new Set(refs.map(r => r.id));
+    const all = (t.expenses || []).filter(e => e.cat === cat || ids.has(e.itemId));
+    if (!all.length) return ro() ? '' : `<div class="sec-cost empty-cost">${label} 비용을 넣으면 여기와 경비 탭에 함께 합산돼요.</div>`;
+    const krw = all.reduce((a, e) => a + (krwOf(t, e) || 0), 0);
+    const loose = all.filter(e => !ids.has(e.itemId)); // 특정 항공편·숙소에 연결 안 된 비용
+    return `<div class="sec-cost">
+      <div class="sec-total"><span>${label} 비용 합계</span><b class="num">${fmtNum(krw)}원</b><small>${all.length}건 · 경비 탭에 반영됨</small></div>
+      ${loose.length ? `<ul class="cost-list">${loose.map(e => `<li ${ro() ? '' : `data-act="edit-exp" data-id="${e.id}" role="button" tabindex="0"`}><span>${esc(e.title || EXP_LABEL[e.cat])}</span><span class="num">${esc(fmtMoney(e.amount, e.currency))}${e.currency !== 'KRW' && krwOf(t, e) != null ? ` <small>${fmtNum(krwOf(t, e))}원</small>` : ''}</span></li>`).join('')}</ul>` : ''}
+    </div>`;
+  }
+
   function costBox(t, refId, addAct, emptyText) {
     const list = (t.expenses || []).filter(e => e.itemId === refId);
     const krw = list.reduce((a, e) => a + (krwOf(t, e) || 0), 0);
@@ -696,7 +710,8 @@
   function stayTab(t) {
     const list = [...(t.stays || [])].sort((a, b) => (a.checkIn || '').localeCompare(b.checkIn || ''));
     return `
-      <div class="section-title"><h2>숙소</h2>${ro() ? '' : `<button class="btn primary sm" data-act="add-stay">${ICON.plus}숙소 추가</button>`}</div>
+      <div class="section-title"><h2>숙소</h2>${ro() ? '' : `<button class="btn sm" data-act="add-exp-sec" data-cat="stay">${ICON.plus}비용</button><button class="btn primary sm" data-act="add-stay">${ICON.plus}숙소 추가</button>`}</div>
+      ${sectionCost(t, 'stay', list, '숙박')}
       ${list.length ? '' : `<div class="empty">등록된 숙소가 없어요.${ro() ? '' : '<br>숙소를 추가하면 체크인·체크아웃이 일정에 자동으로 들어가요.'}</div>`}
       ${list.map(s => stayCard(t, s)).join('')}`;
   }
@@ -1556,10 +1571,17 @@
     if (e.target.closest('[data-stop]')) return;
     const el = e.target.closest('[data-act]'); if (!el) return;
     const act = el.dataset.act, id = el.dataset.id, t = curTrip();
-    if (ro() && ['add-exp-check', 'add-stay', 'edit-stay', 'add-exp-flight', 'add-exp-stay', 'edit-trip', 'add-item', 'edit-item', 'day-title', 'add-flight', 'edit-flight', 'edit-check', 'del-check', 'load-template', 'share', 'add-exp', 'add-exp-item', 'edit-exp', 'edit-rate', 'fetch-rates'].includes(act)) return;
+    if (ro() && ['add-exp-sec', 'add-exp-check', 'add-stay', 'edit-stay', 'add-exp-flight', 'add-exp-stay', 'edit-trip', 'add-item', 'edit-item', 'day-title', 'add-flight', 'edit-flight', 'edit-check', 'del-check', 'load-template', 'share', 'add-exp', 'add-exp-item', 'edit-exp', 'edit-rate', 'fetch-rates'].includes(act)) return;
     switch (act) {
       case 'add-exp': expSheet(t, null); break;
       case 'add-stay': staySheet(t, null); break;
+      case 'add-exp-sec': {
+        // 항공편·숙소가 하나뿐이면 거기에 바로 연결해요
+        const cat = el.dataset.cat, refs = cat === 'flight' ? (t.flights || []) : (t.stays || []);
+        const one = refs.length === 1 ? refs[0] : null;
+        expSheet(t, null, { date: '', cat, itemId: one ? one.id : '', title: one ? linkTitle(t, one.id) : '', currency: cat === 'flight' ? 'KRW' : undefined });
+        break;
+      }
       case 'add-exp-check': { const c = t.checklist.find(x => x.id === id); if (c) expSheet(t, null, checkPreset(c)); break; }
       case 'edit-stay': staySheet(t, (t.stays || []).find(x => x.id === id)); break;
       case 'add-exp-flight': { const f = t.flights.find(x => x.id === id); if (f) expSheet(t, null, flightPreset(t, f)); break; }
