@@ -300,6 +300,54 @@ body::before {
 .ap-more summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--accent); padding: 4px 0; }
 .ap-more-body { display: grid; gap: 10px; padding-top: 6px; }
 
+/* ───── 경비 ───── */
+.day-spent { text-align: right; display: grid; font-size: 11px; color: var(--muted); line-height: 1.2; }
+.day-spent b { font-size: 14px; color: var(--ink); font-weight: 500; }
+.tl-card { position: relative; }
+.tl-spent { font-size: 13px; font-weight: 500; color: var(--accent); margin-top: 2px; }
+.tl-spent small { color: var(--muted); font-weight: 400; }
+.add-exp { position: absolute; top: 4px; right: 4px; min-height: 28px; padding: 0 8px; font-size: 12px; color: var(--muted); }
+.add-exp svg { width: 14px; height: 14px; }
+.money-hero { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; display: grid; gap: 4px; margin-bottom: 14px; }
+.money-hero .lbl { font-size: 12px; color: var(--muted); letter-spacing: .06em; font-weight: 600; }
+.money-hero .big { font-family: var(--font-display); font-weight: 700; font-size: 44px; line-height: 1; letter-spacing: .01em; }
+.money-hero .big small { font-family: var(--font-body); font-size: 18px; font-weight: 600; margin-left: 4px; }
+.money-hero .sub { font-size: 13px; color: var(--muted); }
+.warn-line { font-size: 12px; color: var(--warn); font-weight: 600; }
+.cur-split { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--muted); padding-top: 6px; border-top: 1px dashed var(--line); margin-top: 4px; }
+.cur-split b { color: var(--ink); font-weight: 500; }
+.rates { margin-bottom: 14px; }
+.rate-list { list-style: none; margin: 0 0 8px; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+.rate-list li { display: grid; grid-template-columns: 44px 1fr auto auto; gap: 8px; align-items: center; padding: 6px 6px 6px 12px; border-top: 1px solid var(--line); min-height: 46px; }
+.rate-list li:first-child { border-top: 0; }
+.rate-list .rc { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.rate-list .rv { font-size: 15px; font-weight: 500; min-width: 0; }
+.rate-list .rd { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.miss { color: var(--warn); font-weight: 600; }
+.h2s { margin: 0 0 8px; font-size: 17px; }
+.cat-bars { margin-bottom: 14px; display: grid; gap: 6px; }
+.cb-row { display: grid; grid-template-columns: 64px 1fr auto; gap: 10px; align-items: center; font-size: 13px; }
+.cb-track { height: 10px; background: var(--surface-2); border-radius: 5px; overflow: hidden; border: 1px solid var(--line); }
+.cb-track i { display: block; height: 100%; background: var(--accent); border-radius: 0 4px 4px 0; }
+.cb-v { text-align: right; white-space: nowrap; }
+.cb-v small { color: var(--muted); margin-left: 2px; }
+.exp-group { margin-bottom: 12px; }
+.exp-group h3 { display: flex; justify-content: space-between; margin: 0 0 6px; font-size: 13px; color: var(--muted); letter-spacing: .04em; }
+.exp-group h3 .num { color: var(--ink); font-weight: 500; }
+.exp-list { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+.exp-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 9px 12px; border-top: 1px solid var(--line); cursor: pointer; }
+.exp-row:first-child { border-top: 0; }
+.ex-main { min-width: 0; }
+.ex-title { font-weight: 600; overflow-wrap: anywhere; }
+.ex-sub { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.ex-amt { text-align: right; white-space: nowrap; }
+.ex-amt > .num { font-weight: 500; }
+.ex-krw { font-size: 12px; color: var(--muted); }
+.ex-mini { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; border-bottom: 1px dashed var(--line); }
+.krw-preview { font-size: 14px; min-height: 1.4em; margin-top: -4px; }
+.krw-preview b { color: var(--accent); font-family: var(--font-mono); font-weight: 500; }
+.krw-preview span { color: var(--muted); font-size: 12px; }
+
 /* ───── 체크리스트 ───── */
 .progress-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; display: grid; gap: 8px; margin-bottom: 14px; }
 .progress-card .row { display: flex; align-items: baseline; gap: 10px; }
