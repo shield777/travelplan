@@ -1,0 +1,921 @@
+/* 트래블플랜 — 여행 일정 앱 (서버 없이 브라우저에 저장) */
+(function () {
+  'use strict';
+
+  const { AIRPORTS, AIRLINES, ICN_T2, COUNTRY_LIST } = window.TP_DATA;
+  const AP = Object.fromEntries(AIRPORTS.map(a => [a.code, a]));
+  const STORE_KEY = 'travelplan.v1';
+  const UI_KEY = 'travelplan.ui';
+  const IN_FRAME = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
+
+  // ───────── 아이콘 ─────────
+  const svg = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${d}</svg>`;
+  const ICON = {
+    plane: svg('<path d="M10.5 21l2.2-7.5H18a2 2 0 0 0 0-4h-5.3L10.5 2H8.6l1.4 7.5H5.6L4 7H2.6l.9 4.5-.9 4.5H4l1.6-2.5H10L8.6 21z" fill="currentColor" stroke="none"/>'),
+    move: svg('<rect x="4" y="3.5" width="16" height="13" rx="2"/><path d="M4 10.5h16M8 20l1-3.5M16 20l-1-3.5"/><circle cx="8" cy="13.5" r=".6" fill="currentColor"/><circle cx="16" cy="13.5" r=".6" fill="currentColor"/>'),
+    sight: svg('<path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13.2" r="3.3"/>'),
+    food: svg('<path d="M7 3v18M4.5 3v5a2.5 2.5 0 0 0 5 0V3M17 21V3c-2.3 1.2-3.5 4-3.5 8H17"/>'),
+    stay: svg('<path d="M3 19V6M3 14h18v5M21 14v-2a3 3 0 0 0-3-3h-7v5"/><circle cx="7" cy="10.5" r="1.8"/>'),
+    shop: svg('<path d="M5 8h14l-1.2 13H6.2zM9 8V6.5a3 3 0 0 1 6 0V8"/>'),
+    etc: svg('<circle cx="12" cy="12" r="3.2"/>'),
+    plus: svg('<path d="M12 5v14M5 12h14"/>'),
+    back: svg('<path d="M15 5l-7 7 7 7"/>'),
+    edit: svg('<path d="M4 20h4L19 9l-4-4L4 16z"/>'),
+    trash: svg('<path d="M4 7h16M9 7V4h6v3M6.5 7l1 13h9l1-13"/>'),
+    doc: svg('<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 13h6M9 17h6"/>'),
+    close: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
+    save: svg('<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>')
+  };
+  const TYPES = [
+    { id: 'move', label: '이동' }, { id: 'sight', label: '관광' }, { id: 'food', label: '식사' },
+    { id: 'stay', label: '숙소' }, { id: 'shop', label: '쇼핑' }, { id: 'etc', label: '기타' }
+  ];
+  const TYPE_LABEL = Object.fromEntries(TYPES.map(t => [t.id, t.label]));
+  const CATS = ['서류', '예약', '돈', '통신', '짐', '집', '기타'];
+  const DUE_OPTS = [[null, '기한 없음'], [60, 'D-60'], [30, 'D-30'], [14, 'D-14'], [7, 'D-7'], [3, 'D-3'], [1, 'D-1'], [0, '출발일']];
+
+  // ───────── 기본 도구 ─────────
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const WD = ['일', '월', '화', '수', '목', '금', '토'];
+  const pad = n => String(n).padStart(2, '0');
+  const parseD = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+  const toStr = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const todayStr = () => toStr(new Date());
+  const addDays = (s, n) => { const d = parseD(s); d.setDate(d.getDate() + n); return toStr(d); };
+  const diffDays = (a, b) => Math.round((parseD(b) - parseD(a)) / 86400000);
+  const fmtD = s => { if (!s) return ''; const d = parseD(s); return `${d.getMonth() + 1}.${d.getDate()}(${WD[d.getDay()]})`; };
+  const fmtDLong = s => { const d = parseD(s); return `${d.getMonth() + 1}월 ${d.getDate()}일 (${WD[d.getDay()]})`; };
+  const isDomestic = trip => /한국|대한민국|korea/i.test(trip.country || '');
+  const mapUrl = q => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+  const naverUrl = q => `https://map.naver.com/p/search/${encodeURIComponent(q)}`;
+
+  function tripDays(trip) {
+    if (!trip.startDate || !trip.endDate) return [];
+    const n = Math.max(0, diffDays(trip.startDate, trip.endDate));
+    return Array.from({ length: Math.min(n, 120) + 1 }, (_, i) => addDays(trip.startDate, i));
+  }
+  function tripName(t) { return [t.year, t.country, t.city].filter(Boolean).join(' · '); }
+  function nightsLabel(t) {
+    if (!t.startDate || !t.endDate) return '';
+    const n = diffDays(t.startDate, t.endDate);
+    return n <= 0 ? '당일' : `${n}박 ${n + 1}일`;
+  }
+  function dday(t) {
+    if (!t.startDate) return { text: '날짜 미정', cls: 'past' };
+    const today = todayStr();
+    const toStart = diffDays(today, t.startDate);
+    if (toStart > 0) return { text: `D-${toStart}`, cls: '' };
+    if (toStart === 0) return { text: 'D-DAY', cls: 'now' };
+    if (t.endDate && diffDays(today, t.endDate) >= 0) return { text: `여행 ${1 - toStart}일차`, cls: 'now' };
+    return { text: '다녀옴', cls: 'past' };
+  }
+
+  // ───────── 저장소 ─────────
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (raw) { const s = JSON.parse(raw); if (s && Array.isArray(s.trips)) return s; }
+    } catch (e) { /* 저장소를 못 쓰는 환경 */ }
+    return { trips: [sampleTrip()], seeded: true };
+  }
+  function save() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { toast('이 브라우저에서는 저장이 안 돼요. 백업 파일로 보관하세요.'); }
+  }
+  function loadUI() {
+    try { return JSON.parse(localStorage.getItem(UI_KEY)) || { view: 'home' }; } catch (e) { return { view: 'home' }; }
+  }
+  function saveUI() { try { localStorage.setItem(UI_KEY, JSON.stringify(ui)); } catch (e) { /* 무시 */ } }
+  const curTrip = () => state.trips.find(t => t.id === ui.tripId);
+
+  // ───────── 기본 체크리스트 ─────────
+  const TEMPLATE = [
+    ['서류', '여권 유효기간 확인 (입국일 기준 6개월 이상 남았는지)', 60, true],
+    ['서류', '비자·전자여행허가 필요 여부 확인 (ESTA·eTA·ETA 등)', 30, true],
+    ['서류', '아이 여권·필요 서류 챙기기', 30, true],
+    ['예약', '항공권 e-티켓 저장', 30, false],
+    ['예약', '숙소 예약 확인 (주소·체크인 시간)', 14, false],
+    ['예약', '여행자보험 가입', 7, false],
+    ['예약', '공항 주차 예약 또는 공항 가는 교통편 정하기', 7, false],
+    ['예약', '온라인 체크인·좌석 지정', 1, false],
+    ['돈', '환전 또는 트래블카드 충전', 7, true],
+    ['통신', '로밍·eSIM·유심 준비', 3, true],
+    ['통신', '입국 신고 사전 등록 (예: 일본 Visit Japan Web)', 3, true],
+    ['짐', '충전기·보조배터리 (보조배터리는 기내 반입만 가능)', 1, false],
+    ['짐', '여행지 전압·콘센트 어댑터 확인', 3, true],
+    ['짐', '상비약 (해열제·소화제·밴드)', 3, false],
+    ['짐', '아이 준비물 (간식·놀거리·여벌옷)', 1, false],
+    ['집', '가스·전기·창문 점검, 음식물 쓰레기 버리기', 0, false]
+  ];
+  function templateChecklist(domestic) {
+    return TEMPLATE.filter(r => !(domestic && r[3])).map(([cat, text, due]) => ({ id: uid(), cat, text, due, done: false, memo: '' }));
+  }
+
+  function sampleTrip() {
+    const list = templateChecklist(false);
+    list.slice(0, 5).forEach(c => { c.done = true; });
+    const d = ['2026-11-20', '2026-11-21', '2026-11-22', '2026-11-23'];
+    return {
+      id: uid(), example: true, year: 2026, country: '일본', city: '오사카', subtitle: '가족여행 (예시)',
+      startDate: d[0], endDate: d[3], memo: '앱 사용법을 보여 주는 예시 여행이에요. 확인 후 지워도 돼요.',
+      dayTitles: { [d[0]]: '도착 · 난바', [d[1]]: '유니버설 스튜디오', [d[2]]: '교토 당일치기', [d[3]]: '쇼핑 · 귀국' },
+      flights: [
+        { id: uid(), flightNo: 'KE723', dep: 'ICN', arr: 'KIX', depDate: d[0], depTime: '08:30', arrDate: d[0], arrTime: '10:20', depTerminal: '', arrTerminal: '', gate: '', seat: '32A·B·C', pnr: '', memo: '예시 항공편이에요. 실제 시간과 다를 수 있어요.' },
+        { id: uid(), flightNo: 'KE724', dep: 'KIX', arr: 'ICN', depDate: d[3], depTime: '15:30', arrDate: d[3], arrTime: '17:20', depTerminal: '', arrTerminal: '', gate: '', seat: '', pnr: '', memo: '' }
+      ],
+      items: [
+        { id: uid(), date: d[0], time: '11:10', type: 'move', title: '난카이 라피트로 난바 이동', place: '간사이공항역', memo: '약 40분, 지정석' },
+        { id: uid(), date: d[0], time: '12:30', type: 'stay', title: '호텔 짐 맡기기', place: '난바역 근처 호텔', memo: '체크인 15:00' },
+        { id: uid(), date: d[0], time: '13:00', type: 'food', title: '점심 · 오코노미야키', place: '도톤보리', memo: '' },
+        { id: uid(), date: d[0], time: '18:00', type: 'sight', title: '도톤보리 야경 산책', place: '도톤보리 글리코 사인', memo: '' },
+        { id: uid(), date: d[1], time: '08:00', type: 'move', title: 'JR로 유니버설시티역 이동', place: '', memo: '' },
+        { id: uid(), date: d[1], time: '08:45', type: 'sight', title: '유니버설 스튜디오 재팬', place: 'Universal Studios Japan', memo: '익스프레스 패스 앱에 저장해 둠' },
+        { id: uid(), date: d[2], time: '09:00', type: 'move', title: '한큐선으로 교토 이동', place: '오사카 우메다역', memo: '' },
+        { id: uid(), date: d[2], time: '10:00', type: 'sight', title: '후시미 이나리 신사', place: 'Fushimi Inari Taisha', memo: '아이와 함께면 중간 지점까지만' },
+        { id: uid(), date: d[2], time: '14:00', type: 'sight', title: '기요미즈데라', place: 'Kiyomizu-dera', memo: '' },
+        { id: uid(), date: d[3], time: '09:30', type: 'shop', title: '체크아웃 후 신사이바시 쇼핑', place: '신사이바시스지', memo: '' },
+        { id: uid(), date: d[3], time: '12:30', type: 'move', title: '공항으로 출발', place: '난바역', memo: '출발 3시간 전 도착 목표' }
+      ],
+      checklist: list
+    };
+  }
+
+  // ───────── 공항·항공 도우미 ─────────
+  const airlineCode = no => { const m = String(no || '').toUpperCase().replace(/\s/g, '').match(/^([A-Z0-9]{2})(\d{1,4})/); return m ? m[1] : ''; };
+  const airlineName = no => AIRLINES[airlineCode(no)] || '';
+  const findAp = code => AP[String(code || '').toUpperCase()] || null;
+
+  function suggestTerminal(f, side) {
+    const code = side === 'dep' ? f.dep : f.arr;
+    const ap = findAp(code);
+    if (!ap || !ap.terminals || !ap.terminals.length) return '';
+    const al = airlineCode(f.flightNo);
+    if (ap.code === 'ICN' && al) return ICN_T2.has(al) ? 'T2' : 'T1';
+    if (ap.terminals.includes('국내선') && ap.terminals.includes('국제선')) {
+      const other = findAp(side === 'dep' ? f.arr : f.dep);
+      if (other) return other.country === ap.country ? '국내선' : '국제선';
+    }
+    if (ap.code === 'KIX' && al) return al === 'MM' ? 'T2' : 'T1';
+    return '';
+  }
+  function terminalOf(f, side) {
+    const v = side === 'dep' ? f.depTerminal : f.arrTerminal;
+    if (v) return { v, est: false };
+    const s = suggestTerminal(f, side);
+    return { v: s, est: !!s };
+  }
+  function gateHint(f) {
+    const ap = findAp(f.dep);
+    const g = String(f.gate || '').trim();
+    if (!g) return { text: '게이트는 보통 출발 1~2시간 전에 정해지고 바뀔 수 있어요. 공항 전광판·항공사 앱으로 꼭 다시 확인하세요.', warn: false };
+    const n = parseInt(g.replace(/\D/g, ''), 10);
+    const term = terminalOf(f, 'dep').v;
+    if (ap && ap.code === 'ICN' && n) {
+      if (n >= 1 && n <= 50) return { text: '제1터미널 본관 게이트예요. 출국심사 후 바로 걸어갈 수 있어요.', warn: term === 'T2' };
+      if (n >= 101 && n <= 132) return { text: '제1터미널 탑승동 게이트예요. 출국심사 후 셔틀트레인을 타고 이동해야 하니 면세점 쇼핑 전에 위치부터 확인하세요.', warn: term === 'T2' };
+      if (n >= 200 && n <= 299) return { text: '제2터미널 게이트예요.', warn: term === 'T1' };
+    }
+    return { text: '탑승 시작 시간보다 20~30분 일찍 게이트 근처에 가 있으면 안전해요.', warn: false };
+  }
+
+  function tzOffset(tz, date) {
+    try {
+      const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(date).map(x => [x.type, x.value]));
+      return Math.round((Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute) - Math.floor(date.getTime() / 60000) * 60000) / 60000);
+    } catch (e) { return null; }
+  }
+  function localToUTC(tz, dateStr, timeStr) {
+    if (!dateStr || !timeStr) return null;
+    const [y, m, d] = dateStr.split('-').map(Number); const [h, mi] = timeStr.split(':').map(Number);
+    const guess = Date.UTC(y, m - 1, d, h, mi);
+    const o1 = tzOffset(tz, new Date(guess)); if (o1 == null) return null;
+    let utc = guess - o1 * 60000;
+    const o2 = tzOffset(tz, new Date(utc)); if (o2 !== o1) utc = guess - o2 * 60000;
+    return utc;
+  }
+  function flightDuration(f) {
+    const a = findAp(f.dep), b = findAp(f.arr);
+    if (!a || !b) return '';
+    const s = localToUTC(a.tz, f.depDate, f.depTime), e = localToUTC(b.tz, f.arrDate || f.depDate, f.arrTime);
+    if (s == null || e == null) return '';
+    const min = Math.round((e - s) / 60000);
+    if (min <= 0 || min > 30 * 60) return '';
+    return `${Math.floor(min / 60)}시간 ${pad(min % 60)}분`;
+  }
+  function tzLabel(ap, dateStr) {
+    const at = new Date((dateStr ? parseD(dateStr) : new Date()).getTime() + 12 * 3600000);
+    const o = tzOffset(ap.tz, at), k = tzOffset('Asia/Seoul', at);
+    if (o == null || k == null) return '';
+    const dm = o - k;
+    const utc = `UTC${o >= 0 ? '+' : '−'}${Math.floor(Math.abs(o) / 60)}${Math.abs(o) % 60 ? ':' + pad(Math.abs(o) % 60) : ''}`;
+    if (dm === 0) return `${utc} · 한국과 같은 시간`;
+    const h = Math.abs(dm) / 60; const hs = Number.isInteger(h) ? `${h}시간` : `${Math.floor(h)}시간 ${Math.abs(dm) % 60}분`;
+    return `${utc} · 한국보다 ${hs} ${dm < 0 ? '느림' : '빠름'}`;
+  }
+  function apName(code, custom) { const a = findAp(code); return a ? a.ko : (custom || ''); }
+  function sortFlights(fs) { return [...fs].sort((a, b) => ((a.depDate || '') + (a.depTime || '')).localeCompare((b.depDate || '') + (b.depTime || ''))); }
+
+  let state = load();
+  let ui = loadUI();
+
+  // ───────── 렌더링 ─────────
+  const app = $('#app');
+
+  function render() {
+    const trip = curTrip();
+    if (ui.view === 'trip' && trip) renderTrip(trip); else { ui.view = 'home'; renderHome(); }
+    saveUI();
+  }
+
+  function renderHome() {
+    const trips = [...state.trips].sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''));
+    const byYear = {};
+    trips.forEach(t => { const y = t.year || (t.startDate || '').slice(0, 4) || '연도 미정'; (byYear[y] = byYear[y] || []).push(t); });
+    const years = Object.keys(byYear).sort((a, b) => String(b).localeCompare(String(a)));
+
+    app.innerHTML = `
+      <div class="wrap">
+        <header class="topbar">
+          <div class="grow brand">Travelplan<small>여행 일정</small></div>
+          <button class="btn sm" data-act="backup">백업</button>
+          <button class="btn primary sm" data-act="new-trip">${ICON.plus}새 여행</button>
+        </header>
+        ${trips.length === 0 ? `<div class="empty">아직 여행이 없어요.<br>오른쪽 위 <b>새 여행</b>으로 연도·나라·여행지를 입력해 시작하세요.</div>` : ''}
+        ${years.map(y => `
+          <section class="year-group">
+            <div class="year-head">${esc(y)}<span>${byYear[y].length}개 여행</span></div>
+            ${byYear[y].sort((a, b) => (a.startDate || '').localeCompare(b.startDate || '')).map(tripCard).join('')}
+          </section>`).join('')}
+      </div>`;
+  }
+
+  function tripCard(t) {
+    const dd = dday(t);
+    const total = (t.checklist || []).length, done = (t.checklist || []).filter(c => c.done).length;
+    const routes = sortFlights(t.flights || []).map(f => `<span class="route-chip">${esc(f.dep || '?')}→${esc(f.arr || '?')}</span>`).join('');
+    return `
+      <button class="trip-card" data-act="open-trip" data-id="${t.id}">
+        <div>
+          <div class="crumb">${esc(t.year || '')} · <b>${esc(t.country || '나라 미정')}</b>${t.example ? '<span class="example-badge">예시</span>' : ''}</div>
+          <h3>${esc(t.city || '여행지 미정')}</h3>
+          ${t.subtitle ? `<div class="sub">${esc(t.subtitle)}</div>` : ''}
+        </div>
+        <span class="dchip ${dd.cls}">${dd.text}</span>
+        <div class="meta">
+          <span class="num">${fmtD(t.startDate)} – ${fmtD(t.endDate)}</span><span>${nightsLabel(t)}</span>
+          ${routes}
+          ${total ? `<span>준비 <span class="num">${done}/${total}</span> <span class="mini-bar"><i style="width:${Math.round(done / total * 100)}%"></i></span></span>` : ''}
+        </div>
+      </button>`;
+  }
+
+  function renderTrip(t) {
+    const dd = dday(t);
+    const tab = ui.tab || 'plan';
+    const total = (t.checklist || []).length, done = (t.checklist || []).filter(c => c.done).length;
+    app.innerHTML = `
+      <div class="wrap">
+        <header class="topbar">
+          <button class="btn icon ghost" data-act="home" aria-label="여행 목록">${ICON.back}</button>
+          <div class="grow"></div>
+          <button class="btn sm" data-act="pdf">${ICON.doc}PDF</button>
+          <button class="btn sm" data-act="edit-trip">${ICON.edit}여행 정보</button>
+        </header>
+        <section class="trip-head">
+          <div>
+            <div class="crumb">${esc(t.year || '')} · ${esc(t.country || '나라 미정')}${t.example ? '<span class="example-badge">예시</span>' : ''}</div>
+            <h1>${esc(t.city || '여행지 미정')}</h1>
+            <div class="dates"><span class="num">${fmtD(t.startDate)} – ${fmtD(t.endDate)}</span> · ${nightsLabel(t)}${t.subtitle ? ' · ' + esc(t.subtitle) : ''}</div>
+          </div>
+          <span class="dchip ${dd.cls}">${dd.text}</span>
+        </section>
+        <nav class="tabs" role="tablist">
+          <button role="tab" aria-selected="${tab === 'plan'}" data-act="tab" data-tab="plan">일정</button>
+          <button role="tab" aria-selected="${tab === 'flights'}" data-act="tab" data-tab="flights">항공·공항<span class="count">${(t.flights || []).length || ''}</span></button>
+          <button role="tab" aria-selected="${tab === 'check'}" data-act="tab" data-tab="check">준비<span class="count">${done}/${total}</span></button>
+        </nav>
+        <div id="tab-body">${tab === 'flights' ? flightsTab(t) : tab === 'check' ? checkTab(t) : planTab(t)}</div>
+      </div>`;
+  }
+
+  // ── 일정 탭
+  function dayEntries(t, date) {
+    const items = (t.items || []).filter(i => i.date === date).map(i => ({ kind: 'item', sort: i.time || '99:99', i }));
+    const fl = (t.flights || []).filter(f => f.depDate === date).map(f => ({ kind: 'flight', sort: f.depTime || '99:99', f }));
+    const arr = (t.flights || []).filter(f => f.arrDate && f.arrDate !== f.depDate && f.arrDate === date).map(f => ({ kind: 'arrive', sort: f.arrTime || '00:00', f }));
+    return [...items, ...fl, ...arr].sort((a, b) => a.sort.localeCompare(b.sort));
+  }
+
+  function planTab(t) {
+    const days = tripDays(t);
+    if (!days.length) return `<div class="empty">여행 날짜를 먼저 입력해 주세요.<br><button class="btn primary sm" data-act="edit-trip" style="margin-top:10px">여행 정보 입력</button></div>`;
+    const today = todayStr();
+    const strip = days.map((d, i) => {
+      const n = dayEntries(t, d).length;
+      return `<button class="day-pill ${d === today ? 'today' : ''}" data-act="jump" data-date="${d}">
+        <span class="dn">${i + 1}일차</span><span class="dd num">${fmtD(d)}</span>
+        <span class="dt">${esc((t.dayTitles || {})[d] || '')}&nbsp;</span><span class="cnt">일정 ${n}개</span></button>`;
+    }).join('');
+    const outside = (t.items || []).filter(i => !days.includes(i.date));
+    return `
+      <div class="day-strip">${strip}</div>
+      ${days.map((d, i) => daySection(t, d, i, today)).join('')}
+      ${outside.length ? `<section class="day"><div class="day-head"><div class="info"><div class="title">여행 기간 밖 일정</div><div class="date">날짜를 바꾸면 해당 일차로 옮겨져요</div></div></div>
+        <ul class="timeline">${outside.map(i => itemRow(i, true)).join('')}</ul></section>` : ''}`;
+  }
+
+  function daySection(t, d, i, today) {
+    const entries = dayEntries(t, d);
+    const title = (t.dayTitles || {})[d];
+    return `
+      <section class="day" id="day-${d}">
+        <div class="day-head">
+          <div class="no">${i + 1}<small>일차</small></div>
+          <div class="info">
+            <div class="date">${fmtDLong(d)}${d === today ? '<span class="today-tag">오늘</span>' : ''}</div>
+            <div class="title ${title ? '' : 'placeholder'}" data-act="day-title" data-date="${d}" role="button" tabindex="0">${title ? esc(title) : '이 날의 제목 (예: 교토 당일치기)'}</div>
+          </div>
+        </div>
+        ${entries.length ? `<ul class="timeline">${entries.map(e => e.kind === 'item' ? itemRow(e.i) : flightRow(e.f, e.kind === 'arrive')).join('')}</ul>` : ''}
+        <div class="add-row" ${entries.length ? '' : 'style="padding-left:0"'}>
+          <button class="btn sm" data-act="add-item" data-date="${d}">${ICON.plus}일정 추가</button>
+        </div>
+      </section>`;
+  }
+
+  function itemRow(i, showDate) {
+    return `
+      <li class="tl-item">
+        <div class="tl-time">${esc(i.time || '—')}${i.endTime ? `<small>~${esc(i.endTime)}</small>` : ''}${showDate ? `<small>${fmtD(i.date)}</small>` : ''}</div>
+        <div class="tl-rail"><span class="tl-dot"></span></div>
+        <div class="tl-card" data-act="edit-item" data-id="${i.id}" role="button" tabindex="0">
+          <div class="tl-type">${ICON[i.type] || ICON.etc}${TYPE_LABEL[i.type] || '기타'}</div>
+          <div class="tl-title">${esc(i.title)}</div>
+          ${i.place ? `<div class="tl-place"><a href="${mapUrl(i.place)}" target="_blank" rel="noopener" data-stop="1">${esc(i.place)} ↗</a></div>` : ''}
+          ${i.memo ? `<div class="tl-memo">${esc(i.memo)}</div>` : ''}
+          ${i.cost ? `<div class="tl-cost">${esc(i.cost)}</div>` : ''}
+        </div>
+      </li>`;
+  }
+
+  function flightRow(f, arriveOnly) {
+    const dt = terminalOf(f, 'dep');
+    const sub = arriveOnly
+      ? `${esc(f.flightNo)} 도착 · ${esc(apName(f.arr, f.arrName))}`
+      : [airlineName(f.flightNo), dt.v ? `${dt.v}${dt.est ? '(추정)' : ''}` : '', f.gate ? `게이트 ${f.gate}` : '', f.seat ? `좌석 ${f.seat}` : ''].filter(Boolean).map(esc).join(' · ');
+    return `
+      <li class="tl-item flight">
+        <div class="tl-time">${esc(arriveOnly ? f.arrTime : f.depTime || '—')}</div>
+        <div class="tl-rail"><span class="tl-dot"></span></div>
+        <div class="tl-card flight" data-act="goto-flight" data-id="${f.id}" role="button" tabindex="0">
+          <div class="tl-type">${ICON.plane}항공 ${esc(f.flightNo || '')}</div>
+          <div class="fl-route">${esc(f.dep || '?')} <span class="t">${esc(f.depTime || '')}</span><span class="arr">→</span>${esc(f.arr || '?')} <span class="t">${esc(f.arrTime || '')}${f.arrDate && f.arrDate !== f.depDate ? ' +' + diffDays(f.depDate, f.arrDate) : ''}</span></div>
+          <div class="fl-sub">${sub}</div>
+        </div>
+      </li>`;
+  }
+
+  // ── 항공·공항 탭
+  function flightsTab(t) {
+    const fs = sortFlights(t.flights || []);
+    const seen = new Set();
+    return `
+      <div class="section-title"><h2>항공편</h2><button class="btn primary sm" data-act="add-flight">${ICON.plus}항공편 추가</button></div>
+      <div class="info-note">편명과 출발·도착 공항 코드를 넣으면 공항 이름, 터미널(추정), 시차, 비행시간, 주차장, 지도 링크가 자동으로 나와요. 게이트는 출발 당일 정해지므로 <b>직접 입력</b>하고 <b>실시간 확인</b> 링크로 다시 확인하세요.</div>
+      ${fs.length ? fs.map(f => flightCard(t, f, seen)).join('') : `<div class="empty">등록된 항공편이 없어요.</div>`}`;
+  }
+
+  function flightCard(t, f, seen) {
+    const da = findAp(f.dep), aa = findAp(f.arr);
+    const dt = terminalOf(f, 'dep'), at = terminalOf(f, 'arr');
+    const dur = flightDuration(f);
+    const al = airlineName(f.flightNo);
+    const fno = String(f.flightNo || '').replace(/\s/g, '');
+    return `
+      <article class="flight-card" id="fl-${f.id}">
+        <div class="pass">
+          <div class="pass-top"><b>${esc(fno || '편명 없음')}</b><span>${esc(al)}</span><span class="grow"></span><span class="num">${fmtD(f.depDate)}</span></div>
+          <div class="pass-route">
+            <div class="end"><div class="code">${esc(f.dep || '???')}</div><div class="tm">${esc(f.depTime || '--:--')}</div><div class="nm">${esc(apName(f.dep, f.depName))}</div></div>
+            <div class="mid">${ICON.plane}${dur ? esc(dur) : ''}</div>
+            <div class="end right"><div class="code">${esc(f.arr || '???')}</div><div class="tm">${esc(f.arrTime || '--:--')}${f.arrDate && f.arrDate !== f.depDate ? ' +' + diffDays(f.depDate, f.arrDate) : ''}</div><div class="nm">${esc(apName(f.arr, f.arrName))}</div></div>
+          </div>
+        </div>
+        <dl class="pass-fields">
+          <div><dt>출발 터미널</dt><dd>${esc(dt.v || '-')}${dt.est ? '<span class="est">추정</span>' : ''}</dd></div>
+          <div><dt>게이트</dt><dd>${esc(f.gate || '-')}</dd></div>
+          <div><dt>좌석</dt><dd>${esc(f.seat || '-')}</dd></div>
+          <div><dt>예약번호</dt><dd>${esc(f.pnr || '-')}</dd></div>
+        </dl>
+        <div class="airport-pair">
+          ${airportPanel(f, da, 'dep', dt, seen)}
+          ${airportPanel(f, aa, 'arr', at, seen)}
+        </div>
+        ${f.memo ? `<div class="ap" style="border-top:1px solid var(--line)"><div class="note-small">${esc(f.memo)}</div></div>` : ''}
+        <div class="flight-actions">
+          ${fno ? `<div class="links" style="margin-right:auto"><a href="https://www.google.com/search?q=${encodeURIComponent(fno + ' flight status')}" target="_blank" rel="noopener">실시간 게이트·지연 확인 ↗</a><a href="https://www.flightradar24.com/data/flights/${encodeURIComponent(fno.toLowerCase())}" target="_blank" rel="noopener">Flightradar24 ↗</a></div>` : ''}
+          <button class="btn sm" data-act="edit-flight" data-id="${f.id}">${ICON.edit}수정</button>
+        </div>
+      </article>`;
+  }
+
+  function airportPanel(f, ap, side, term, seen) {
+    const label = side === 'dep' ? '출발 공항' : '도착 공항';
+    const date = side === 'dep' ? f.depDate : (f.arrDate || f.depDate);
+    if (!ap) {
+      const code = side === 'dep' ? f.dep : f.arr;
+      const nm = side === 'dep' ? f.depName : f.arrName;
+      const q = nm || (code ? code + ' airport' : '');
+      return `<div class="ap"><div class="ap-sign"><span class="lbl">${label}</span><span class="nm">${esc(nm || code || '공항 미입력')}</span><span class="en">앱 공항 목록에 없는 공항이에요</span></div>
+        ${q ? `<div class="links"><a href="${mapUrl(q)}" target="_blank" rel="noopener">지도 ↗</a><a href="${mapUrl(q + ' parking')}" target="_blank" rel="noopener">근처 주차장 ↗</a></div>` : ''}</div>`;
+    }
+    const hint = side === 'dep' ? gateHint(f) : null;
+    const isKr = ap.country === '대한민국';
+    const first = !seen.has(ap.code); seen.add(ap.code);
+    const showPark = ap.parking && ap.parking.length && (side === 'dep' || isKr);
+    const hasMore = (ap.notes && ap.notes.length) || showPark;
+    return `
+      <div class="ap">
+        <div class="ap-sign">
+          <span class="lbl">${label} · ${esc(ap.code)}</span>
+          <span class="nm">${esc(ap.ko)}${term.v ? ` · ${esc(term.v)}` : ''}${term.est ? ' <span class="est" style="color:var(--sign-fg)">추정</span>' : ''}</span>
+          <span class="en">${esc(ap.en)} · ${esc(ap.city)}, ${esc(ap.country)}</span>
+          <span class="tzl">${esc(tzLabel(ap, date))}</span>
+        </div>
+        ${hint ? `<div class="gate-box ${hint.warn ? 'warn' : ''}">${f.gate ? `<span class="g">${esc(f.gate)}</span>` : '<b>게이트 미정</b> · '}${esc(hint.text)}${hint.warn ? ' <b>입력한 터미널과 게이트가 맞지 않아요. 다시 확인하세요.</b>' : ''}</div>` : ''}
+        ${term.est ? `<div class="note-small">터미널은 항공사 기준 추정값이에요. 항공권·항공사 안내로 확인하세요.</div>` : ''}
+        ${hasMore ? `<details class="ap-more" ${first ? 'open' : ''}><summary>${first ? '공항 안내' : '공항 안내 (위와 같음)'}${showPark ? ' · 주차장' : ''}</summary><div class="ap-more-body">` : ''}
+        ${ap.notes && ap.notes.length ? `<div><h4>알아두면 좋은 점</h4><ul>${ap.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul></div>` : ''}
+        ${showPark ? `
+          <div><h4>주차장</h4><div class="park">${ap.parking.map(p => `
+            <div class="park-item"><span class="p">P</span><div><b>${esc(p.name)}</b>${esc(p.desc)}
+              <div class="lk"><a href="${naverUrl(p.q)}" target="_blank" rel="noopener">네이버지도 ↗</a><a href="${mapUrl(p.q)}" target="_blank" rel="noopener">구글지도 ↗</a></div></div></div>`).join('')}
+          </div>${ap.parkingNote ? `<div class="note-small" style="margin-top:6px">${esc(ap.parkingNote)}</div>` : ''}</div>` : ''}
+        ${hasMore ? '</div></details>' : ''}
+        <div class="links">
+          <a href="${mapUrl(ap.en)}" target="_blank" rel="noopener">공항 지도 ↗</a>
+          ${!ap.parking ? `<a href="${mapUrl('parking near ' + ap.en)}" target="_blank" rel="noopener">근처 주차장 ↗</a>` : ''}
+          <a href="${ap.site || 'https://www.google.com/search?q=' + encodeURIComponent(ap.en + ' official site')}" target="_blank" rel="noopener">${ap.site ? '공식 사이트' : '공식 사이트 검색'} ↗</a>
+        </div>
+      </div>`;
+  }
+
+  // ── 준비 탭
+  function checkTab(t) {
+    const list = t.checklist || [];
+    const done = list.filter(c => c.done).length;
+    const pct = list.length ? Math.round(done / list.length * 100) : 0;
+    const dd = dday(t);
+    const today = todayStr();
+    const over = list.filter(c => !c.done && isOver(t, c, today)).length;
+    const cats = CATS.filter(c => list.some(x => (x.cat || '기타') === c));
+    return `
+      <div class="progress-card">
+        <div class="row"><span class="big num">${done}<small>/${list.length}</small></span><span class="grow" style="flex:1">완료 · ${pct}%</span><span class="dchip ${dd.cls}">${dd.text}</span></div>
+        <div class="bar"><i style="width:${pct}%"></i></div>
+        ${over ? `<div class="note-small" style="color:var(--warn);font-weight:600">기한이 지난 항목이 ${over}개 있어요.</div>` : ''}
+      </div>
+      ${list.length === 0 ? `<div class="empty">준비 항목이 없어요.<br><button class="btn sm" data-act="load-template" style="margin-top:10px">기본 준비 리스트 불러오기</button></div>` : ''}
+      ${cats.map(c => {
+        const items = list.filter(x => (x.cat || '기타') === c);
+        return `<section class="cat"><h3>${esc(c)} <span class="num">${items.filter(x => x.done).length}/${items.length}</span></h3>
+          <ul class="check-list">${items.map(x => checkRow(t, x, today)).join('')}</ul></section>`;
+      }).join('')}
+      <form class="add-check" id="add-check-form">
+        <input type="text" id="new-check-text" placeholder="새 할 일 (예: 유모차 대여 예약)" aria-label="새 할 일" required>
+        <select id="new-check-cat" aria-label="분류">${CATS.map(c => `<option>${c}</option>`).join('')}</select>
+        <select id="new-check-due" aria-label="기한">${DUE_OPTS.map(([v, l]) => `<option value="${v ?? ''}">${l}</option>`).join('')}</select>
+        <button class="btn primary" type="submit">${ICON.plus}추가</button>
+      </form>
+      ${list.length ? `<div style="margin-top:10px;text-align:right"><button class="btn sm ghost" data-act="load-template">기본 항목 다시 추가</button></div>` : ''}`;
+  }
+  function dueDate(t, c) { return (c.due == null || c.due === '' || !t.startDate) ? null : addDays(t.startDate, -Number(c.due)); }
+  function isOver(t, c, today) { const d = dueDate(t, c); return d ? today > d : false; }
+  function checkRow(t, c, today) {
+    const d = dueDate(t, c);
+    const over = !c.done && isOver(t, c, today);
+    return `
+      <li class="check-item ${c.done ? 'done' : ''}">
+        <label class="box"><input type="checkbox" data-act="toggle-check" data-id="${c.id}" ${c.done ? 'checked' : ''} aria-label="${esc(c.text)} 완료"></label>
+        <div class="txt" data-act="edit-check" data-id="${c.id}" role="button" tabindex="0">
+          <div class="t">${esc(c.text)}</div>
+          ${d ? `<div class="due ${over ? 'over' : ''}">${Number(c.due) === 0 ? '출발일' : 'D-' + c.due}까지 · ${fmtD(d)}${over ? ' · 기한 지남' : ''}</div>` : ''}
+          ${c.memo ? `<div class="memo">${esc(c.memo)}</div>` : ''}
+        </div>
+        <button class="btn icon ghost sm del" data-act="del-check" data-id="${c.id}" aria-label="삭제">${ICON.trash}</button>
+      </li>`;
+  }
+
+  // ───────── 시트(입력창) ─────────
+  const sheetRoot = $('#sheet-root');
+  let sheetClose = null;
+  function openSheet(title, body, foot, onMount) {
+    sheetRoot.innerHTML = `
+      <div class="sheet-scrim" data-scrim="1">
+        <div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+          <div class="sheet-head"><h2>${esc(title)}</h2><button class="btn icon ghost" data-close="1" aria-label="닫기">${ICON.close}</button></div>
+          <form class="form" id="sheet-form" novalidate>${body}<div class="sheet-foot">${foot}</div></form>
+        </div>
+      </div>`;
+    const root = sheetRoot.firstElementChild;
+    const close = () => { sheetRoot.innerHTML = ''; document.removeEventListener('keydown', onKey); sheetClose = null; };
+    const onKey = e => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    root.addEventListener('click', e => { if (e.target.dataset.scrim || e.target.closest('[data-close]')) close(); });
+    sheetClose = close;
+    onMount && onMount(root, close);
+    const first = root.querySelector('input:not([type=checkbox]), select, textarea');
+    if (first && window.matchMedia('(min-width: 700px)').matches) first.focus();
+    return close;
+  }
+  function confirmSheet(msg, yesLabel, onYes) {
+    openSheet('확인', `<p style="margin:0">${esc(msg)}</p>`,
+      `<button type="button" class="btn" data-close="1">취소</button><button type="submit" class="btn primary danger" style="background:var(--warn);border-color:var(--warn);color:var(--surface)">${esc(yesLabel)}</button>`,
+      (root, close) => { $('#sheet-form', root).addEventListener('submit', e => { e.preventDefault(); close(); onYes(); }); });
+  }
+  const val = (root, id) => ($('#' + id, root)?.value ?? '').trim();
+
+  // 여행 정보
+  function tripSheet(t) {
+    const isNew = !t;
+    t = t || { year: '', country: '', city: '', subtitle: '', startDate: '', endDate: '', memo: '' };
+    openSheet(isNew ? '새 여행' : '여행 정보', `
+      <div class="grid3">
+        <label class="field"><span>연도</span><input type="number" id="f-year" inputmode="numeric" value="${esc(t.year)}" placeholder="출발일 기준 자동"></label>
+        <label class="field"><span>나라</span><input type="text" id="f-country" list="dl-country" value="${esc(t.country)}" placeholder="일본" required></label>
+        <label class="field"><span>여행지</span><input type="text" id="f-city" value="${esc(t.city)}" placeholder="오사카" required></label>
+      </div>
+      <datalist id="dl-country">${COUNTRY_LIST.map(c => `<option value="${esc(c)}">`).join('')}</datalist>
+      <label class="field"><span>부제 <span class="hint">(선택) 예: 가족여행, 결혼기념일</span></span><input type="text" id="f-sub" value="${esc(t.subtitle)}"></label>
+      <div class="grid2">
+        <label class="field"><span>출발일</span><input type="date" id="f-start" value="${esc(t.startDate)}" required></label>
+        <label class="field"><span>돌아오는 날</span><input type="date" id="f-end" value="${esc(t.endDate)}" required></label>
+      </div>
+      <label class="field"><span>메모</span><textarea id="f-memo">${esc(t.memo)}</textarea></label>
+      ${isNew ? `<label class="check-inline"><input type="checkbox" id="f-tpl" checked> 기본 준비 리스트 넣기 (여권·보험·환전 등)</label>` : ''}
+      <div class="ap-preview" id="f-name-preview"></div>
+      <div class="ap-preview" id="f-err" style="color:var(--warn)"></div>`,
+      `${isNew ? '' : `<button type="button" class="btn danger left" id="f-del">${ICON.trash}여행 삭제</button>`}<button type="button" class="btn" data-close="1">취소</button><button type="submit" class="btn primary">저장</button>`,
+      (root, close) => {
+        const upd = () => { const y = val(root, 'f-year') || val(root, 'f-start').slice(0, 4); $('#f-name-preview', root).innerHTML = `여행 이름: <b>${esc([y, val(root, 'f-country'), val(root, 'f-city')].filter(Boolean).join(' · ') || '-')}</b>`; };
+        root.addEventListener('input', upd); upd();
+        $('#f-start', root).addEventListener('change', () => { const s = val(root, 'f-start'), e = $('#f-end', root); if (s && (!e.value || e.value < s)) e.value = s; });
+        $('#f-del', root)?.addEventListener('click', () => {
+          close();
+          confirmSheet(`'${tripName(t)}' 여행을 삭제할까요? 일정·항공편·체크리스트가 모두 지워져요.`, '삭제', () => {
+            state.trips = state.trips.filter(x => x.id !== t.id); ui.view = 'home'; save(); render(); toast('여행을 삭제했어요');
+          });
+        });
+        $('#sheet-form', root).addEventListener('submit', e => {
+          e.preventDefault();
+          const country = val(root, 'f-country'), city = val(root, 'f-city'), s = val(root, 'f-start'), en = val(root, 'f-end');
+          if (!country || !city || !s || !en) { $('#f-err', root).textContent = '나라, 여행지, 출발일, 돌아오는 날을 모두 입력해 주세요.'; return; }
+          if (en < s) { $('#f-err', root).textContent = '돌아오는 날이 출발일보다 빨라요.'; return; }
+          const data = { year: Number(val(root, 'f-year')) || Number(s.slice(0, 4)), country, city, subtitle: val(root, 'f-sub'), startDate: s, endDate: en, memo: val(root, 'f-memo') };
+          if (isNew) {
+            const nt = { id: uid(), ...data, dayTitles: {}, items: [], flights: [], checklist: $('#f-tpl', root).checked ? templateChecklist(/한국|대한민국/.test(country)) : [] };
+            state.trips.push(nt); ui.tripId = nt.id; ui.view = 'trip'; ui.tab = 'plan';
+          } else {
+            Object.assign(t, data);
+          }
+          save(); close(); render(); toast('저장했어요');
+        });
+      });
+  }
+
+  // 일정 항목
+  function itemSheet(t, item, date) {
+    const isNew = !item;
+    item = item || { date, time: '', endTime: '', type: 'sight', title: '', place: '', memo: '', cost: '' };
+    const days = tripDays(t);
+    openSheet(isNew ? '일정 추가' : '일정 수정', `
+      <div class="field"><span>종류</span><div class="type-pick">${TYPES.map(ty => `<label><input type="radio" name="f-type" value="${ty.id}" ${item.type === ty.id ? 'checked' : ''}>${ICON[ty.id]}<span>${ty.label}</span></label>`).join('')}</div></div>
+      <label class="field"><span>무엇을 하나요</span><input type="text" id="f-title" value="${esc(item.title)}" placeholder="예: 유니버설 스튜디오" required></label>
+      <div class="grid3">
+        <label class="field"><span>날짜</span><select id="f-date">${days.map((d, i) => `<option value="${d}" ${d === item.date ? 'selected' : ''}>${i + 1}일차 ${fmtD(d)}</option>`).join('')}${days.includes(item.date) ? '' : `<option value="${esc(item.date)}" selected>${fmtD(item.date)}</option>`}</select></label>
+        <label class="field"><span>시작</span><input type="time" id="f-time" value="${esc(item.time)}"></label>
+        <label class="field"><span>끝 <span class="hint">(선택)</span></span><input type="time" id="f-end" value="${esc(item.endTime)}"></label>
+      </div>
+      <label class="field"><span>장소 <span class="hint">지도 링크로 연결돼요</span></span><input type="text" id="f-place" value="${esc(item.place)}" placeholder="예: Kiyomizu-dera"></label>
+      <label class="field"><span>메모</span><textarea id="f-memo">${esc(item.memo)}</textarea></label>
+      <label class="field"><span>비용 <span class="hint">(선택)</span></span><input type="text" id="f-cost" value="${esc(item.cost)}" placeholder="예: ¥8,600 × 3"></label>
+      <div class="ap-preview" id="f-err" style="color:var(--warn)"></div>`,
+      `${isNew ? '' : `<button type="button" class="btn danger left" id="f-del">${ICON.trash}삭제</button>`}<button type="button" class="btn" data-close="1">취소</button><button type="submit" class="btn primary">저장</button>`,
+      (root, close) => {
+        $('#f-del', root)?.addEventListener('click', () => { t.items = t.items.filter(x => x.id !== item.id); save(); close(); render(); toast('일정을 삭제했어요'); });
+        $('#sheet-form', root).addEventListener('submit', e => {
+          e.preventDefault();
+          const title = val(root, 'f-title');
+          if (!title) { $('#f-err', root).textContent = '무엇을 하는지 적어 주세요.'; return; }
+          const data = { date: val(root, 'f-date'), time: val(root, 'f-time'), endTime: val(root, 'f-end'), type: (root.querySelector('input[name=f-type]:checked') || {}).value || 'etc', title, place: val(root, 'f-place'), memo: val(root, 'f-memo'), cost: val(root, 'f-cost') };
+          if (isNew) t.items.push({ id: uid(), ...data }); else Object.assign(item, data);
+          save(); close(); render(); toast('저장했어요');
+        });
+      });
+  }
+
+  // 항공편
+  function flightSheet(t, f) {
+    const isNew = !f;
+    f = f || { flightNo: '', dep: '', arr: '', depName: '', arrName: '', depDate: t.startDate || '', depTime: '', arrDate: '', arrTime: '', depTerminal: '', arrTerminal: '', gate: '', seat: '', pnr: '', memo: '' };
+    const apOpts = AIRPORTS.map(a => `<option value="${a.code}">${esc(a.ko)} · ${esc(a.city)}</option>`).join('');
+    openSheet(isNew ? '항공편 추가' : '항공편 수정', `
+      <div class="grid2">
+        <label class="field"><span>편명</span><input type="text" id="f-no" value="${esc(f.flightNo)}" placeholder="KE723" autocapitalize="characters" autocomplete="off"></label>
+        <div class="field"><span>항공사</span><div class="ap-preview" id="f-al" style="padding-top:10px"></div></div>
+      </div>
+      <div class="grid2">
+        <label class="field"><span>출발 공항 코드</span><input type="text" id="f-dep" list="dl-ap" value="${esc(f.dep)}" placeholder="ICN" autocapitalize="characters" autocomplete="off" maxlength="3"><span class="ap-preview" id="p-dep"></span></label>
+        <label class="field"><span>도착 공항 코드</span><input type="text" id="f-arr" list="dl-ap" value="${esc(f.arr)}" placeholder="KIX" autocapitalize="characters" autocomplete="off" maxlength="3"><span class="ap-preview" id="p-arr"></span></label>
+      </div>
+      <datalist id="dl-ap">${apOpts}</datalist>
+      <div class="grid2" id="custom-names">
+        <label class="field" id="w-depName" hidden><span>출발 공항 이름 (목록에 없음)</span><input type="text" id="f-depName" value="${esc(f.depName || '')}"></label>
+        <label class="field" id="w-arrName" hidden><span>도착 공항 이름 (목록에 없음)</span><input type="text" id="f-arrName" value="${esc(f.arrName || '')}"></label>
+      </div>
+      <div class="grid2">
+        <label class="field"><span>출발 날짜</span><input type="date" id="f-ddate" value="${esc(f.depDate)}"></label>
+        <label class="field"><span>출발 시간 (현지)</span><input type="time" id="f-dtime" value="${esc(f.depTime)}"></label>
+      </div>
+      <div class="grid2">
+        <label class="field"><span>도착 날짜 <span class="hint">비우면 출발일</span></span><input type="date" id="f-adate" value="${esc(f.arrDate)}"></label>
+        <label class="field"><span>도착 시간 (현지)</span><input type="time" id="f-atime" value="${esc(f.arrTime)}"></label>
+      </div>
+      <div class="grid3">
+        <label class="field"><span>출발 터미널</span><input type="text" id="f-dterm" value="${esc(f.depTerminal)}" placeholder=""></label>
+        <label class="field"><span>도착 터미널</span><input type="text" id="f-aterm" value="${esc(f.arrTerminal)}" placeholder=""></label>
+        <label class="field"><span>게이트</span><input type="text" id="f-gate" value="${esc(f.gate)}" placeholder="당일 확인" inputmode="text"></label>
+      </div>
+      <div class="grid2">
+        <label class="field"><span>좌석</span><input type="text" id="f-seat" value="${esc(f.seat)}" placeholder="32A"></label>
+        <label class="field"><span>예약번호</span><input type="text" id="f-pnr" value="${esc(f.pnr)}" autocapitalize="characters"></label>
+      </div>
+      <label class="field"><span>메모</span><textarea id="f-memo">${esc(f.memo)}</textarea></label>
+      <div class="note-small">터미널을 비워 두면 항공사 기준으로 추정해서 보여 줘요. 시간은 각 공항의 현지 시간으로 입력하세요.</div>`,
+      `${isNew ? '' : `<button type="button" class="btn danger left" id="f-del">${ICON.trash}삭제</button>`}<button type="button" class="btn" data-close="1">취소</button><button type="submit" class="btn primary">저장</button>`,
+      (root, close) => {
+        const upd = () => {
+          const no = val(root, 'f-no'), dep = val(root, 'f-dep').toUpperCase(), arr = val(root, 'f-arr').toUpperCase();
+          $('#f-al', root).innerHTML = airlineName(no) ? `<b>${esc(airlineName(no))}</b>` : (no ? '목록에 없는 항공사' : '');
+          const tmp = { flightNo: no, dep, arr };
+          [['dep', dep], ['arr', arr]].forEach(([s, c]) => {
+            const a = findAp(c);
+            $('#p-' + s, root).innerHTML = a ? `<b>${esc(a.ko)}</b> · ${esc(a.city)}` : (c.length === 3 ? '목록에 없는 공항 · 아래에 이름을 적어 주세요' : '');
+            $('#w-' + s + 'Name', root).hidden = !(c.length === 3 && !a);
+          });
+          $('#f-dterm', root).placeholder = suggestTerminal(tmp, 'dep') ? suggestTerminal(tmp, 'dep') + ' (추정)' : '';
+          $('#f-aterm', root).placeholder = suggestTerminal(tmp, 'arr') ? suggestTerminal(tmp, 'arr') + ' (추정)' : '';
+        };
+        root.addEventListener('input', upd); upd();
+        $('#f-del', root)?.addEventListener('click', () => { t.flights = t.flights.filter(x => x.id !== f.id); save(); close(); render(); toast('항공편을 삭제했어요'); });
+        $('#sheet-form', root).addEventListener('submit', e => {
+          e.preventDefault();
+          const data = {
+            flightNo: val(root, 'f-no').toUpperCase().replace(/\s/g, ''), dep: val(root, 'f-dep').toUpperCase(), arr: val(root, 'f-arr').toUpperCase(),
+            depName: val(root, 'f-depName'), arrName: val(root, 'f-arrName'),
+            depDate: val(root, 'f-ddate'), depTime: val(root, 'f-dtime'), arrDate: val(root, 'f-adate'), arrTime: val(root, 'f-atime'),
+            depTerminal: val(root, 'f-dterm').toUpperCase(), arrTerminal: val(root, 'f-aterm').toUpperCase(), gate: val(root, 'f-gate').toUpperCase(),
+            seat: val(root, 'f-seat').toUpperCase(), pnr: val(root, 'f-pnr').toUpperCase(), memo: val(root, 'f-memo')
+          };
+          if (!data.arrDate) data.arrDate = data.depDate;
+          if (isNew) t.flights.push({ id: uid(), ...data }); else Object.assign(f, data);
+          save(); close(); render(); toast('저장했어요');
+        });
+      });
+  }
+
+  function dayTitleSheet(t, d) {
+    openSheet(`${fmtDLong(d)} 제목`, `<label class="field"><span>이 날의 제목</span><input type="text" id="f-dt" value="${esc((t.dayTitles || {})[d] || '')}" placeholder="예: 교토 당일치기"></label>`,
+      `<button type="button" class="btn" data-close="1">취소</button><button type="submit" class="btn primary">저장</button>`,
+      (root, close) => { $('#sheet-form', root).addEventListener('submit', e => { e.preventDefault(); t.dayTitles = t.dayTitles || {}; t.dayTitles[d] = val(root, 'f-dt'); save(); close(); render(); }); });
+  }
+
+  function checkSheet(t, c) {
+    openSheet('할 일 수정', `
+      <label class="field"><span>할 일</span><input type="text" id="f-text" value="${esc(c.text)}"></label>
+      <div class="grid2">
+        <label class="field"><span>분류</span><select id="f-cat">${CATS.map(x => `<option ${x === c.cat ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
+        <label class="field"><span>기한</span><select id="f-due">${DUE_OPTS.map(([v, l]) => `<option value="${v ?? ''}" ${String(v ?? '') === String(c.due ?? '') ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      </div>
+      <label class="field"><span>메모</span><textarea id="f-memo">${esc(c.memo || '')}</textarea></label>`,
+      `<button type="button" class="btn" data-close="1">취소</button><button type="submit" class="btn primary">저장</button>`,
+      (root, close) => {
+        $('#sheet-form', root).addEventListener('submit', e => {
+          e.preventDefault();
+          const text = val(root, 'f-text'); if (!text) return;
+          const due = val(root, 'f-due');
+          Object.assign(c, { text, cat: val(root, 'f-cat'), due: due === '' ? null : Number(due), memo: val(root, 'f-memo') });
+          save(); close(); render();
+        });
+      });
+  }
+
+  // ───────── 백업 ─────────
+  function backupSheet() {
+    openSheet('백업 · 복원', `
+      <p style="margin:0" class="note-small">여행 데이터는 지금 쓰는 기기의 브라우저에만 저장돼요. 아이폰과 아이패드는 서로 공유되지 않으니, 백업 파일을 iCloud Drive에 저장해 두고 다른 기기에서 불러오세요.</p>
+      <button type="button" class="btn" id="b-export">${ICON.save}백업 파일 만들기 (.json)</button>
+      <label class="field"><span>백업 파일 불러오기</span><input type="file" id="b-import" accept="application/json,.json"></label>
+      <div class="ap-preview" id="b-msg"></div>`,
+      `<button type="button" class="btn" data-close="1">닫기</button>`,
+      (root, close) => {
+        $('#b-export', root).addEventListener('click', () => {
+          const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+          deliverFile(blob, `travelplan-backup-${todayStr()}.json`);
+        });
+        $('#b-import', root).addEventListener('change', e => {
+          const file = e.target.files[0]; if (!file) return;
+          const r = new FileReader();
+          r.onload = () => {
+            try {
+              const data = JSON.parse(r.result);
+              if (!data || !Array.isArray(data.trips)) throw new Error('형식 오류');
+              let added = 0, updated = 0;
+              data.trips.forEach(tr => {
+                const i = state.trips.findIndex(x => x.id === tr.id);
+                if (i >= 0) { state.trips[i] = tr; updated++; } else { state.trips.push(tr); added++; }
+              });
+              save(); close(); render(); toast(`불러오기 완료 · 새 여행 ${added}개, 덮어쓴 여행 ${updated}개`);
+            } catch (err) { $('#b-msg', root).textContent = '이 파일은 트래블플랜 백업 파일이 아니에요.'; }
+          };
+          r.readAsText(file);
+        });
+      });
+  }
+
+  // 파일 내보내기: 공유 시트(아이폰) → 안 되면 다운로드
+  function deliverFile(blob, filename) {
+    const file = (() => { try { return new File([blob], filename, { type: blob.type }); } catch (e) { return null; } })();
+    if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file], title: filename }).catch(err => { if (err && err.name !== 'AbortError') downloadBlob(blob, filename); });
+      return;
+    }
+    downloadBlob(blob, filename);
+  }
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    if (IN_FRAME) toast('미리보기 화면에서는 파일 저장이 막혀 있어요. 실제 앱 주소에서 이용하세요.');
+  }
+
+  // ───────── PDF ─────────
+  function pdfSheet(t) {
+    openSheet('PDF 내보내기', `
+      <div class="field"><span>넣을 내용</span>
+        <label class="check-inline"><input type="checkbox" id="p-flights" checked> 항공편</label>
+        <label class="check-inline"><input type="checkbox" id="p-airports" checked> 공항 정보 (터미널·주차장·팁)</label>
+        <label class="check-inline"><input type="checkbox" id="p-plan" checked> 일차별 일정</label>
+        <label class="check-inline"><input type="checkbox" id="p-check" checked> 준비 체크리스트</label>
+      </div>
+      <div class="ap-preview" id="p-msg">${IN_FRAME ? '미리보기 화면에서는 PDF 저장·인쇄가 막혀 있어요. 실제 앱 주소에서 이용하세요.' : 'A4 세로로 만들어요. 아이폰에서는 공유 시트가 열리면 “파일에 저장”이나 카카오톡으로 보낼 수 있어요.'}</div>`,
+      `<button type="button" class="btn left" id="p-print">인쇄</button><button type="button" class="btn" data-close="1">취소</button><button type="submit" class="btn primary">${ICON.doc}PDF 만들기</button>`,
+      (root, close) => {
+        const opts = () => ({ flights: $('#p-flights', root).checked, airports: $('#p-airports', root).checked, plan: $('#p-plan', root).checked, check: $('#p-check', root).checked });
+        $('#p-print', root).addEventListener('click', () => {
+          const pr = $('#print-root'); pr.innerHTML = ''; pr.appendChild(buildReport(t, opts()));
+          close(); setTimeout(() => window.print(), 50);
+        });
+        $('#sheet-form', root).addEventListener('submit', async e => {
+          e.preventDefault();
+          if (!window.html2pdf) { $('#p-msg', root).textContent = 'PDF 도구를 불러오지 못했어요. 인터넷 연결을 확인하거나 “인쇄”에서 PDF로 저장하세요.'; return; }
+          const btn = e.submitter || root.querySelector('button[type=submit]');
+          btn.disabled = true; btn.textContent = '만드는 중…';
+          const filename = `${tripName(t).replace(/ · /g, '_')}_여행일정.pdf`;
+          const prevY = window.scrollY;
+          window.scrollTo(0, 0); // 스크롤된 상태로 만들면 첫 장이 비거나 내용이 밀려요
+          try {
+            const blob = await window.html2pdf().set({
+              margin: [10, 10, 12, 10], filename,
+              image: { type: 'jpeg', quality: 0.95 },
+              html2canvas: { scale: 2, useCORS: true, backgroundColor: '#FFFFFF', scrollX: 0, scrollY: 0 },
+              jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+              pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', '.r-block', '.r-day-head'] }
+            }).from(buildReport(t, opts())).outputPdf('blob');
+            const pdf = new Blob([blob], { type: 'application/pdf' });
+            window.scrollTo(0, prevY);
+            close();
+            // 아이폰은 사용자가 한 번 더 눌러야 공유 시트를 열 수 있어서 버튼을 따로 보여 줘요
+            openSheet('PDF 준비 완료', `<p style="margin:0">${esc(filename)}</p>`,
+              `<button type="button" class="btn" data-close="1">닫기</button><button type="button" class="btn" id="p-dl">다운로드</button><button type="button" class="btn primary" id="p-share">${ICON.save}저장·공유</button>`,
+              (r2) => {
+                $('#p-share', r2).addEventListener('click', () => deliverFile(pdf, filename));
+                $('#p-dl', r2).addEventListener('click', () => downloadBlob(pdf, filename));
+              });
+          } catch (err) {
+            window.scrollTo(0, prevY);
+            btn.disabled = false; btn.textContent = 'PDF 만들기';
+            $('#p-msg', root).textContent = 'PDF를 만들지 못했어요. “인쇄”를 눌러 PDF로 저장해 보세요.';
+          }
+        });
+      });
+  }
+
+  function buildReport(t, o) {
+    const el = document.createElement('div');
+    el.className = 'report';
+    const fs = sortFlights(t.flights || []);
+    const days = tripDays(t);
+    let h = `<div class="r-crumb">${esc(t.year)} · ${esc(t.country)}</div><h1>${esc(t.city)}${t.subtitle ? ` <span style="font-size:15px;font-weight:500;color:#5B6472">${esc(t.subtitle)}</span>` : ''}</h1>
+      <div class="r-dates">${fmtDLong(t.startDate)} – ${fmtDLong(t.endDate)} · ${nightsLabel(t)}</div>${t.memo ? `<div style="margin-top:6px">${esc(t.memo)}</div>` : ''}`;
+    if (o.flights && fs.length) {
+      h += `<h2>항공편</h2><table><thead><tr><th>편명</th><th>날짜</th><th>구간</th><th>시간(현지)</th><th>터미널</th><th>게이트</th><th>좌석</th><th>예약번호</th></tr></thead><tbody>
+        ${fs.map(f => { const dt = terminalOf(f, 'dep'), at = terminalOf(f, 'arr'); return `<tr><td><b>${esc(f.flightNo)}</b><br>${esc(airlineName(f.flightNo))}</td><td>${fmtD(f.depDate)}</td><td>${esc(f.dep)} ${esc(apName(f.dep, f.depName))}<br>→ ${esc(f.arr)} ${esc(apName(f.arr, f.arrName))}</td><td>${esc(f.depTime)} → ${esc(f.arrTime)}${f.arrDate && f.arrDate !== f.depDate ? ' (+' + diffDays(f.depDate, f.arrDate) + ')' : ''}<br>${esc(flightDuration(f))}</td><td>${esc(dt.v)}${dt.est ? '(추정)' : ''} → ${esc(at.v)}${at.est ? '(추정)' : ''}</td><td>${esc(f.gate || '당일 확인')}</td><td>${esc(f.seat)}</td><td>${esc(f.pnr)}</td></tr>`; }).join('')}
+      </tbody></table>`;
+    }
+    if (o.airports && fs.length) {
+      const codes = []; fs.forEach(f => [f.dep, f.arr].forEach(c => { if (c && !codes.includes(c)) codes.push(c); }));
+      const aps = codes.map(findAp).filter(Boolean);
+      if (aps.length) {
+        h += `<h2>공항 정보</h2>` + aps.map(a => `<div class="r-ap r-block"><b>${esc(a.code)} · ${esc(a.ko)}</b> <span style="color:#5B6472">${esc(a.en)} · ${esc(tzLabel(a, t.startDate))}</span>
+          ${a.terminals && a.terminals.length ? `<div>터미널: ${esc(a.terminals.join(', '))}</div>` : ''}
+          ${(a.notes || []).length ? `<ul>${a.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
+          ${(a.parking || []).length ? `<div style="margin-top:4px"><b style="font-size:12px">주차장</b><ul>${a.parking.map(p => `<li><b>${esc(p.name)}</b> — ${esc(p.desc)}</li>`).join('')}</ul>${a.parkingNote ? `<div style="color:#5B6472">${esc(a.parkingNote)}</div>` : ''}</div>` : ''}
+        </div>`).join('');
+      }
+    }
+    if (o.plan && days.length) {
+      h += `<h2>일차별 일정</h2>` + days.map((d, i) => {
+        const es = dayEntries(t, d);
+        return `<div class="r-day-head"><b>${i + 1}일차</b><span>${fmtDLong(d)}</span><strong>${esc((t.dayTitles || {})[d] || '')}</strong></div>
+          ${es.length ? `<table><tbody>${es.map(e => e.kind === 'item'
+            ? `<tr><td class="t">${esc(e.i.time || '—')}${e.i.endTime ? '~' + esc(e.i.endTime) : ''}</td><td style="width:44px;color:#5B6472">${TYPE_LABEL[e.i.type] || ''}</td><td><b>${esc(e.i.title)}</b>${e.i.place ? ` · ${esc(e.i.place)}` : ''}${e.i.memo ? `<br><span style="color:#5B6472">${esc(e.i.memo)}</span>` : ''}${e.i.cost ? `<br><span style="color:#5B6472">${esc(e.i.cost)}</span>` : ''}</td></tr>`
+            : `<tr><td class="t">${esc(e.kind === 'arrive' ? e.f.arrTime : e.f.depTime)}</td><td style="width:44px;color:#5B6472">항공</td><td><div class="r-flight"><span class="c">${esc(e.f.dep)} → ${esc(e.f.arr)}</span><span>${esc(e.f.flightNo)} ${esc(e.f.depTime)}–${esc(e.f.arrTime)}</span><span>${esc(terminalOf(e.f, 'dep').v)}${e.f.gate ? ' · 게이트 ' + esc(e.f.gate) : ''}</span></div></td></tr>`).join('')}</tbody></table>`
+            : `<div style="color:#5B6472;padding:4px 6px">일정 없음</div>`}`;
+      }).join('');
+    }
+    if (o.check && (t.checklist || []).length) {
+      const list = t.checklist;
+      h += `<h2>준비 체크리스트 (${list.filter(c => c.done).length}/${list.length})</h2>` + CATS.filter(c => list.some(x => (x.cat || '기타') === c)).map(c =>
+        `<div class="r-block" style="margin-bottom:6px"><b style="font-size:12px;color:#5B6472">${esc(c)}</b><div class="r-check">${list.filter(x => (x.cat || '기타') === c).map(x => `<div><span class="bx">${x.done ? '☑' : '☐'}</span><span>${esc(x.text)}${dueDate(t, x) ? ` <span style="color:#5B6472">(${fmtD(dueDate(t, x))}까지)</span>` : ''}</span></div>`).join('')}</div></div>`).join('');
+    }
+    h += `<div class="r-foot">트래블플랜 · ${todayStr()} 생성 · 게이트와 터미널은 출발 당일 공항·항공사 안내로 다시 확인하세요.</div>`;
+    el.innerHTML = h;
+    return el;
+  }
+
+  // ───────── 토스트 ─────────
+  let toastTimer;
+  function toast(msg) {
+    const el = $('#toast'); el.textContent = msg; el.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 2600);
+  }
+
+  // ───────── 이벤트 ─────────
+  app.addEventListener('click', e => {
+    if (e.target.closest('[data-stop]')) return;
+    const el = e.target.closest('[data-act]'); if (!el) return;
+    const act = el.dataset.act, id = el.dataset.id, t = curTrip();
+    switch (act) {
+      case 'new-trip': tripSheet(null); break;
+      case 'backup': backupSheet(); break;
+      case 'open-trip': ui.tripId = id; ui.view = 'trip'; ui.tab = ui.tab || 'plan'; render(); window.scrollTo(0, 0); break;
+      case 'home': ui.view = 'home'; render(); window.scrollTo(0, 0); break;
+      case 'edit-trip': tripSheet(t); break;
+      case 'tab': ui.tab = el.dataset.tab; render(); break;
+      case 'pdf': pdfSheet(t); break;
+      case 'jump': $('#day-' + el.dataset.date)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
+      case 'day-title': dayTitleSheet(t, el.dataset.date); break;
+      case 'add-item': itemSheet(t, null, el.dataset.date); break;
+      case 'edit-item': itemSheet(t, t.items.find(x => x.id === id)); break;
+      case 'goto-flight': ui.tab = 'flights'; render(); setTimeout(() => $('#fl-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30); break;
+      case 'add-flight': flightSheet(t, null); break;
+      case 'edit-flight': flightSheet(t, t.flights.find(x => x.id === id)); break;
+      case 'edit-check': checkSheet(t, t.checklist.find(x => x.id === id)); break;
+      case 'del-check': {
+        const c = t.checklist.find(x => x.id === id);
+        confirmSheet(`'${c.text}' 항목을 지울까요?`, '삭제', () => { t.checklist = t.checklist.filter(x => x.id !== id); save(); render(); });
+        break;
+      }
+      case 'load-template': {
+        const have = new Set(t.checklist.map(c => c.text));
+        const add = templateChecklist(isDomestic(t)).filter(c => !have.has(c.text));
+        t.checklist.push(...add); save(); render(); toast(add.length ? `기본 항목 ${add.length}개를 추가했어요` : '기본 항목이 이미 다 있어요');
+        break;
+      }
+    }
+  });
+  app.addEventListener('keydown', e => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[role=button][data-act]')) { e.preventDefault(); e.target.click(); }
+  });
+  app.addEventListener('change', e => {
+    const el = e.target;
+    if (el.dataset.act === 'toggle-check') {
+      const t = curTrip(); const c = t.checklist.find(x => x.id === el.dataset.id);
+      c.done = el.checked; save(); render();
+    }
+  });
+  app.addEventListener('submit', e => {
+    if (e.target.id !== 'add-check-form') return;
+    e.preventDefault();
+    const t = curTrip(); const text = $('#new-check-text').value.trim(); if (!text) return;
+    const due = $('#new-check-due').value;
+    t.checklist.push({ id: uid(), text, cat: $('#new-check-cat').value, due: due === '' ? null : Number(due), done: false, memo: '' });
+    save(); render(); $('#new-check-text')?.focus();
+  });
+  window.addEventListener('afterprint', () => { $('#print-root').innerHTML = ''; });
+
+  if (state.seeded) { delete state.seeded; save(); }
+  render();
+})();
