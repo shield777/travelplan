@@ -188,9 +188,11 @@ body::before {
   position: sticky; top: calc(env(safe-area-inset-top, 0px) + 64px); z-index: 4;
   display: flex; gap: 4px; padding: 4px; margin-bottom: 14px;
   background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+  overflow-x: auto; scrollbar-width: none; /* 숫자가 길어져도 화면 밖으로 밀리지 않게 */
 }
+.tabs::-webkit-scrollbar { display: none; }
 .tabs button {
-  flex: 1; min-height: 38px; border: 0; background: transparent; border-radius: 999px; font-weight: 600; font-size: 14px; color: var(--muted); cursor: pointer; white-space: nowrap;
+  flex: 1 0 auto; padding: 0 8px; min-height: 38px; border: 0; background: transparent; border-radius: 999px; font-weight: 600; font-size: 14px; color: var(--muted); cursor: pointer; white-space: nowrap;
 }
 .tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
 .tabs .count { font-family: var(--font-mono); font-size: 12px; font-weight: 500; margin-left: 2px; }
@@ -308,6 +310,40 @@ body::before {
 .note-small { font-size: 12px; color: var(--muted); }
 .ap-more summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--accent); padding: 4px 0; }
 .ap-more-body { display: grid; gap: 10px; padding-top: 6px; }
+
+/* ───── 숙박 ───── */
+.tl-card.stay-card { border-style: dashed; }
+.tl-item.stay .tl-dot { background: var(--accent); }
+.stay-box { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; margin-bottom: 18px; box-shadow: var(--shadow); }
+.stay-top { display: flex; gap: 10px; align-items: flex-start; padding: 14px 16px 10px; }
+.stay-name { flex: 1; min-width: 0; }
+.stay-name .lbl { display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: var(--accent); letter-spacing: .04em; }
+.stay-name .lbl svg { width: 15px; height: 15px; }
+.stay-name h3 { margin: 2px 0 0; font-size: 19px; line-height: 1.3; overflow-wrap: anywhere; }
+.stay-name .addr { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.nights { font-family: var(--font-display); font-weight: 700; font-size: 22px; line-height: 1; padding: 6px 10px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+.stay-dates { display: grid; grid-template-columns: 1fr 1fr; margin: 0; border-top: 1px dashed var(--line); }
+.stay-dates div { padding: 8px 16px; min-width: 0; }
+.stay-dates div + div { border-left: 1px solid var(--line); }
+.stay-dates dt, .stay-info dt { font-size: 11px; color: var(--muted); letter-spacing: .06em; }
+.stay-dates dd { margin: 0; font-size: 15px; font-weight: 500; }
+.map-wrap { border-top: 1px solid var(--line); background: var(--surface-2); }
+.map-wrap iframe { display: block; width: 100%; max-width: 100%; height: 200px; border: 0; }
+.map-ph { padding: 18px 16px; font-size: 13px; color: var(--muted); text-align: center; }
+.stay-nav { padding: 8px 16px 10px; margin-top: 0; }
+.stay-info { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; margin: 0; padding: 10px 16px; border-top: 1px solid var(--line); }
+.stay-info .wide { grid-column: 1 / -1; }
+.stay-info dd { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+.cost-box { border-top: 1px solid var(--line); padding: 10px 16px; display: grid; gap: 6px; }
+.cost-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cost-head > span { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .06em; }
+.cost-head b { font-size: 16px; font-weight: 500; }
+.cost-head small { font-size: 12px; color: var(--muted); flex: 1; min-width: 0; }
+.cost-head small.miss { color: var(--warn); flex: none; }
+.cost-head .btn { margin-left: auto; }
+.cost-list { list-style: none; margin: 0; padding: 0; }
+.cost-list li { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 4px 0; border-top: 1px dashed var(--line); cursor: pointer; }
+.cost-list li small { color: var(--muted); margin-left: 4px; }
 
 /* ───── 경비 ───── */
 .day-spent { text-align: right; display: grid; font-size: 11px; color: var(--muted); line-height: 1.2; }

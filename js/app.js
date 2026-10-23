@@ -239,14 +239,17 @@
         { id: uid(), date: d[3], time: '12:30', type: 'move', title: '공항으로 출발', place: '난바역', memo: '출발 3시간 전 도착 목표' }
       ],
       checklist: list,
+      stays: [
+        { id: uid(), name: '난바역 근처 호텔 (예시)', address: 'Namba Station, Osaka', checkIn: d[0], checkInTime: '15:00', checkOut: d[3], checkOutTime: '11:00', confirmNo: '', phone: '', memo: '트리플룸, 조식 포함' }
+      ],
       rates: { JPY: { v: 9.05, date: '2026-10-23', src: 'manual' } },
       expenses: []
     };
     const it = title => (t.items.find(i => i.title.startsWith(title)) || {}).id || '';
     const ex = (date, title, cat, amount, currency, pay, itemId, krw) => ({ id: uid(), date, title, cat, amount, currency, pay, itemId: itemId || '', krw: krw == null ? null : krw, memo: '' });
     t.expenses = [
-      ex('', '항공권 왕복 3명 (예시)', 'flight', 1350000, 'KRW', 'card'),
-      ex('', '난바 호텔 3박 (예시)', 'stay', 96000, 'JPY', 'card', '', 873400),
+      ex('', '항공권 왕복 3명 (예시)', 'flight', 1350000, 'KRW', 'card', t.flights[0].id),
+      ex('', '난바 호텔 3박 (예시)', 'stay', 96000, 'JPY', 'card', t.stays[0].id, 873400),
       ex(d[0], '라피트 3명', 'move', 4040, 'JPY', 'card', it('난카이')),
       ex(d[0], '오코노미야키 점심', 'food', 4800, 'JPY', 'cash', it('점심')),
       ex(d[1], '입장권 어른 2·아이 1', 'tour', 25800, 'JPY', 'card', it('유니버설 스튜디오')),
@@ -421,10 +424,11 @@
         <nav class="tabs" role="tablist">
           <button role="tab" aria-selected="${tab === 'plan'}" data-act="tab" data-tab="plan">일정</button>
           <button role="tab" aria-selected="${tab === 'flights'}" data-act="tab" data-tab="flights">항공<span class="count">${(t.flights || []).length || ''}</span></button>
+          <button role="tab" aria-selected="${tab === 'stay'}" data-act="tab" data-tab="stay">숙박<span class="count">${(t.stays || []).length || ''}</span></button>
           <button role="tab" aria-selected="${tab === 'check'}" data-act="tab" data-tab="check">준비<span class="count">${done}/${total}</span></button>
           <button role="tab" aria-selected="${tab === 'money'}" data-act="tab" data-tab="money">경비</button>
         </nav>
-        <div id="tab-body">${tab === 'flights' ? flightsTab(t) : tab === 'check' ? checkTab(t) : tab === 'money' ? moneyTab(t) : planTab(t)}</div>
+        <div id="tab-body">${tab === 'flights' ? flightsTab(t) : tab === 'stay' ? stayTab(t) : tab === 'check' ? checkTab(t) : tab === 'money' ? moneyTab(t) : planTab(t)}</div>
       </div>`;
   }
 
@@ -433,7 +437,12 @@
     const items = (t.items || []).filter(i => i.date === date).map(i => ({ kind: 'item', sort: i.time || '99:99', i }));
     const fl = (t.flights || []).filter(f => f.depDate === date).map(f => ({ kind: 'flight', sort: f.depTime || '99:99', f }));
     const arr = (t.flights || []).filter(f => f.arrDate && f.arrDate !== f.depDate && f.arrDate === date).map(f => ({ kind: 'arrive', sort: f.arrTime || '00:00', f }));
-    return [...items, ...fl, ...arr].sort((a, b) => a.sort.localeCompare(b.sort));
+    const st = [];
+    (t.stays || []).forEach(s => {
+      if (s.checkIn === date) st.push({ kind: 'checkin', sort: s.checkInTime || '15:00', s });
+      if (s.checkOut === date) st.push({ kind: 'checkout', sort: s.checkOutTime || '11:00', s });
+    });
+    return [...items, ...fl, ...arr, ...st].sort((a, b) => a.sort.localeCompare(b.sort));
   }
 
   function planTab(t) {
@@ -462,7 +471,7 @@
           </div>
           ${money.byDate[d] ? `<div class="day-spent"><span>이날 경비</span><b class="num">${fmtNum(money.byDate[d])}원</b></div>` : ''}
         </div>
-        ${entries.length ? `<ul class="timeline">${entries.map(e => e.kind === 'item' ? itemRow(e.i, false, money, t) : flightRow(e.f, e.kind === 'arrive')).join('')}</ul>` : ''}
+        ${entries.length ? `<ul class="timeline">${entries.map(e => e.kind === 'item' ? itemRow(e.i, false, money, t) : e.s ? stayRow(e.s, e.kind) : flightRow(e.f, e.kind === 'arrive')).join('')}</ul>` : ''}
         ${ro() ? (entries.length ? '' : '<div class="note-small" style="padding-top:8px">일정 없음</div>') : `<div class="add-row" ${entries.length ? '' : 'style="padding-left:0"'}>
           <button class="btn sm" data-act="add-item" data-date="${d}">${ICON.plus}일정 추가</button>
         </div>`}
@@ -488,6 +497,21 @@
         </div>
       </li>`;
   }
+
+  function stayRow(s, kind) {
+    const inn = kind === 'checkin';
+    return `
+      <li class="tl-item stay">
+        <div class="tl-time">${esc((inn ? s.checkInTime : s.checkOutTime) || (inn ? '15:00' : '11:00'))}</div>
+        <div class="tl-rail"><span class="tl-dot"></span></div>
+        <div class="tl-card stay-card" data-act="goto-stay" data-id="${s.id}" role="button" tabindex="0">
+          <div class="tl-type">${ICON.stay}${inn ? '체크인' : '체크아웃'}</div>
+          <div class="tl-title">${esc(s.name)}</div>
+          ${inn && s.checkOut ? `<div class="tl-memo">${nightsBetween(s)}박 · ${fmtD(s.checkOut)} 체크아웃</div>` : ''}
+        </div>
+      </li>`;
+  }
+  const nightsBetween = s => (s.checkIn && s.checkOut ? Math.max(0, diffDays(s.checkIn, s.checkOut)) : 0);
 
   function flightRow(f, arriveOnly) {
     const dt = terminalOf(f, 'dep');
@@ -545,6 +569,7 @@
           ${airportPanel(f, aa, 'arr', at, seen)}
         </div>
         ${f.memo ? `<div class="ap" style="border-top:1px solid var(--line)"><div class="note-small">${esc(f.memo)}</div></div>` : ''}
+        ${costBox(t, f.id, 'add-exp-flight', '항공권 금액을 넣으면 경비에 함께 합산돼요')}
         ${ro() ? '' : `<div class="flight-actions"><button class="btn sm" data-act="edit-flight" data-id="${f.id}">${ICON.edit}수정</button></div>`}
       </article>`;
   }
@@ -641,6 +666,66 @@
       </div>`;
   }
 
+  // 항공편·숙소에 연결된 비용
+  function costBox(t, refId, addAct, emptyText) {
+    const list = (t.expenses || []).filter(e => e.itemId === refId);
+    const krw = list.reduce((a, e) => a + (krwOf(t, e) || 0), 0);
+    const missing = list.some(e => krwOf(t, e) == null);
+    if (!list.length && ro()) return '';
+    return `<div class="cost-box">
+      <div class="cost-head"><span>비용</span>${list.length ? `<b class="num">${fmtNum(krw)}원</b>${missing ? '<small class="miss">일부 환율 없음</small>' : ''}` : `<small>${esc(emptyText)}</small>`}
+        ${ro() ? '' : `<button class="btn sm" data-act="${addAct}" data-id="${refId}">${ICON.plus}비용</button>`}</div>
+      ${list.length ? `<ul class="cost-list">${list.map(e => `<li ${ro() ? '' : `data-act="edit-exp" data-id="${e.id}" role="button" tabindex="0"`}><span>${esc(e.title || EXP_LABEL[e.cat])}</span><span class="num">${esc(fmtMoney(e.amount, e.currency))}${e.currency !== 'KRW' && krwOf(t, e) != null ? ` <small>${fmtNum(krwOf(t, e))}원</small>` : ''}</span></li>`).join('')}</ul>` : ''}
+    </div>`;
+  }
+  const linkTitle = (t, id) => {
+    if (!id) return '';
+    const i = (t.items || []).find(x => x.id === id); if (i) return i.title;
+    const f = (t.flights || []).find(x => x.id === id); if (f) return `${f.flightNo || '항공'} ${f.dep || ''}→${f.arr || ''}`;
+    const s = (t.stays || []).find(x => x.id === id); if (s) return s.name;
+    return '';
+  };
+
+  // ── 숙박 탭
+  const gmapEmbed = q => `https://maps.google.com/maps?q=${encodeURIComponent(q)}&hl=ko&z=15&output=embed`;
+  function stayTab(t) {
+    const list = [...(t.stays || [])].sort((a, b) => (a.checkIn || '').localeCompare(b.checkIn || ''));
+    return `
+      <div class="section-title"><h2>숙소</h2>${ro() ? '' : `<button class="btn primary sm" data-act="add-stay">${ICON.plus}숙소 추가</button>`}</div>
+      ${list.length ? '' : `<div class="empty">등록된 숙소가 없어요.${ro() ? '' : '<br>숙소를 추가하면 체크인·체크아웃이 일정에 자동으로 들어가요.'}</div>`}
+      ${list.map(s => stayCard(t, s)).join('')}`;
+  }
+  function stayCard(t, s) {
+    const q = s.address || s.name;
+    const n = nightsBetween(s);
+    const enc = encodeURIComponent(q);
+    return `
+      <article class="stay-box" id="st-${s.id}">
+        <div class="stay-top">
+          <div class="stay-name"><span class="lbl">${ICON.stay}숙소</span><h3>${esc(s.name)}</h3>${s.address ? `<div class="addr">${esc(s.address)}</div>` : ''}</div>
+          ${n ? `<span class="nights num">${n}박</span>` : ''}
+        </div>
+        <dl class="stay-dates">
+          <div><dt>체크인</dt><dd class="num">${s.checkIn ? fmtD(s.checkIn) : '-'} ${esc(s.checkInTime || '')}</dd></div>
+          <div><dt>체크아웃</dt><dd class="num">${s.checkOut ? fmtD(s.checkOut) : '-'} ${esc(s.checkOutTime || '')}</dd></div>
+        </dl>
+        ${q ? `<div class="map-wrap">${IN_FRAME
+          ? `<div class="map-ph">미리보기 화면에서는 지도를 띄울 수 없어요. 실제 앱 주소에서는 여기에 구글맵이 나와요.</div>`
+          : `<iframe src="${gmapEmbed(q)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="${esc(s.name)} 위치"></iframe>`}</div>
+          <div class="nav-btns stay-nav">
+            <a class="btn sm" href="comgooglemaps://?q=${enc}">구글맵 앱</a>
+            ${isDomestic(t) ? `<a class="btn sm" href="nmap://search?query=${enc}&amp;appname=${encodeURIComponent(NAV_APPNAME)}">네이버지도</a><a class="btn sm" href="kakaomap://search?q=${enc}">카카오맵</a>` : ''}
+          </div>` : ''}
+        ${s.confirmNo || s.phone || s.memo ? `<dl class="stay-info">
+          ${s.confirmNo ? `<div><dt>예약번호</dt><dd class="num">${esc(s.confirmNo)}</dd></div>` : ''}
+          ${s.phone ? `<div><dt>전화</dt><dd class="num">${esc(s.phone)}</dd></div>` : ''}
+          ${s.memo ? `<div class="wide"><dt>메모</dt><dd>${esc(s.memo)}</dd></div>` : ''}
+        </dl>` : ''}
+        ${costBox(t, s.id, 'add-exp-stay', '숙박비를 넣으면 경비에 함께 합산돼요')}
+        ${ro() ? '' : `<div class="flight-actions"><button class="btn sm" data-act="edit-stay" data-id="${s.id}">${ICON.edit}수정</button></div>`}
+      </article>`;
+  }
+
   // ── 경비 탭
   function moneyTab(t) {
     const m = expTotals(t);
@@ -654,10 +739,10 @@
     const strays = (t.expenses || []).filter(e => e.date && !days.includes(e.date));
     const rows = list => list.map(e => {
       const k = krwOf(t, e);
-      const item = e.itemId ? (t.items || []).find(i => i.id === e.itemId) : null;
+      const link = linkTitle(t, e.itemId);
       return `<li class="exp-row" ${ro() ? '' : `data-act="edit-exp" data-id="${e.id}" role="button" tabindex="0"`}>
         <div class="ex-main"><div class="ex-title">${esc(e.title || EXP_LABEL[e.cat] || '경비')}</div>
-          <div class="ex-sub">${esc(EXP_LABEL[e.cat] || '기타')} · ${esc(PAY_LABEL[e.pay] || '')}${item ? ` · ${esc(item.title)}` : ''}${e.memo ? ` · ${esc(e.memo)}` : ''}</div></div>
+          <div class="ex-sub">${esc(EXP_LABEL[e.cat] || '기타')} · ${esc(PAY_LABEL[e.pay] || '')}${link ? ` · ${esc(link)}` : ''}${e.memo ? ` · ${esc(e.memo)}` : ''}</div></div>
         <div class="ex-amt"><div class="num">${esc(fmtMoney(e.amount, e.currency))}</div>
           ${e.currency !== 'KRW' ? `<div class="ex-krw num ${k == null ? 'miss' : ''}">${k == null ? '환율 없음' : `${fmtNum(k)}원${e.krw != null ? ' · 실결제' : ''}`}</div>` : ''}</div>
       </li>`;
@@ -813,7 +898,7 @@
           if (en < s) { $('#f-err', root).textContent = '돌아오는 날이 출발일보다 빨라요.'; return; }
           const data = { year: Number(val(root, 'f-year')) || Number(s.slice(0, 4)), country, city, subtitle: val(root, 'f-sub'), startDate: s, endDate: en, memo: val(root, 'f-memo'), people: Number(val(root, 'f-people')) || '', currency: val(root, 'f-cur') };
           if (isNew) {
-            const nt = { id: uid(), ...data, dayTitles: {}, items: [], flights: [], expenses: [], rates: {}, checklist: $('#f-tpl', root).checked ? templateChecklist(/한국|대한민국/.test(country)) : [] };
+            const nt = { id: uid(), ...data, dayTitles: {}, items: [], flights: [], stays: [], expenses: [], rates: {}, checklist: $('#f-tpl', root).checked ? templateChecklist(/한국|대한민국/.test(country)) : [] };
             state.trips.push(nt); ui.tripId = nt.id; ui.view = 'trip'; ui.tab = 'plan';
           } else {
             Object.assign(t, data);
@@ -865,6 +950,51 @@
 
   // 경비
   const expPreset = item => ({ date: item.date, itemId: item.id, title: item.title, cat: TYPE_TO_EXP[item.type] || 'etc' });
+  // 항공권·숙박비는 보통 여행 전에 결제해서 날짜를 '여행 전'으로 둬요
+  const flightPreset = (t, f) => ({ date: '', itemId: f.id, title: linkTitle(t, f.id), cat: 'flight' });
+  const stayPreset = s => ({ date: '', itemId: s.id, title: s.name, cat: 'stay' });
+
+  // 숙소 입력
+  function staySheet(t, s) {
+    const isNew = !s;
+    s = s || { name: '', address: '', checkIn: t.startDate || '', checkInTime: '15:00', checkOut: t.endDate || '', checkOutTime: '11:00', confirmNo: '', phone: '', memo: '' };
+    openSheet(isNew ? '숙소 추가' : '숙소 수정', `
+      <label class="field"><span>숙소 이름</span><input type="text" id="s-name" value="${esc(s.name)}" placeholder="예: 난바 OO 호텔"></label>
+      <label class="field"><span>주소 <span class="hint">구글맵에서 찾을 수 있게 영문 이름이나 현지 주소가 좋아요</span></span><input type="text" id="s-addr" value="${esc(s.address)}" placeholder="예: 1-2-3 Namba, Chuo-ku, Osaka"></label>
+      <div class="grid2">
+        <label class="field"><span>체크인 날짜</span><input type="date" id="s-in" value="${esc(s.checkIn)}"></label>
+        <label class="field"><span>체크인 시간</span><input type="time" id="s-int" value="${esc(s.checkInTime)}"></label>
+      </div>
+      <div class="grid2">
+        <label class="field"><span>체크아웃 날짜</span><input type="date" id="s-out" value="${esc(s.checkOut)}"></label>
+        <label class="field"><span>체크아웃 시간</span><input type="time" id="s-outt" value="${esc(s.checkOutTime)}"></label>
+      </div>
+      <div class="grid2">
+        <label class="field"><span>예약번호</span><input type="text" id="s-conf" value="${esc(s.confirmNo)}" autocapitalize="characters"></label>
+        <label class="field"><span>전화번호</span><input type="text" id="s-phone" value="${esc(s.phone)}" inputmode="tel"></label>
+      </div>
+      <label class="field"><span>메모</span><input type="text" id="s-memo" value="${esc(s.memo)}" placeholder="예: 트리플룸, 조식 포함"></label>
+      <div class="ap-preview" id="s-err" style="color:var(--warn)"></div>`,
+      `${isNew ? '' : `<button type="button" class="btn danger left" id="s-del">${ICON.trash}삭제</button>`}<button type="button" class="btn" data-close="1">취소</button><button type="submit" class="btn primary">저장</button>`,
+      (root, close) => {
+        $('#s-in', root).addEventListener('change', () => { const a = val(root, 's-in'), b = $('#s-out', root); if (a && (!b.value || b.value < a)) b.value = a; });
+        $('#s-del', root)?.addEventListener('click', () => {
+          t.stays = t.stays.filter(x => x.id !== s.id);
+          (t.expenses || []).forEach(e => { if (e.itemId === s.id) e.itemId = ''; });
+          save(); close(); render(); toast('숙소를 삭제했어요');
+        });
+        $('#sheet-form', root).addEventListener('submit', ev => {
+          ev.preventDefault();
+          const name = val(root, 's-name');
+          if (!name) { $('#s-err', root).textContent = '숙소 이름을 넣어 주세요.'; return; }
+          const data = { name, address: val(root, 's-addr'), checkIn: val(root, 's-in'), checkInTime: val(root, 's-int'), checkOut: val(root, 's-out'), checkOutTime: val(root, 's-outt'), confirmNo: val(root, 's-conf'), phone: val(root, 's-phone'), memo: val(root, 's-memo') };
+          if (data.checkIn && data.checkOut && data.checkOut < data.checkIn) { $('#s-err', root).textContent = '체크아웃 날짜가 체크인보다 빨라요.'; return; }
+          t.stays = t.stays || [];
+          if (isNew) t.stays.push({ id: uid(), ...data }); else Object.assign(s, data);
+          save(); close(); render(); toast('저장했어요');
+        });
+      });
+  }
   function expSheet(t, e, preset = {}) {
     const isNew = !e;
     const days = tripDays(t);
@@ -887,7 +1017,7 @@
         <label class="field"><span>날짜</span><select id="x-date">${dateOpts.map(([v, l]) => `<option value="${v}" ${v === (e.date || '') ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
         <label class="field"><span>결제</span><select id="x-pay">${PAYS.map(([v, l]) => `<option value="${v}" ${v === e.pay ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       </div>
-      <label class="field"><span>연결할 일정 <span class="hint">(선택)</span></span><select id="x-item"></select></label>
+      <label class="field"><span>연결 <span class="hint">(선택) 일정·항공편·숙소</span></span><select id="x-item"></select></label>
       <label class="field" id="x-krw-wrap"><span>실제 원화 결제액 <span class="hint">(선택) 카드 명세서 금액을 알면 넣으세요</span></span><input type="text" id="x-krw" inputmode="numeric" value="${e.krw == null ? '' : esc(e.krw)}" placeholder="비우면 환율로 계산"></label>
       <label class="field"><span>메모</span><input type="text" id="x-memo" value="${esc(e.memo || '')}"></label>
       <div class="ap-preview" id="x-err" style="color:var(--warn)"></div>`,
@@ -897,7 +1027,11 @@
           const d = $('#x-date', root).value;
           const list = (t.items || []).filter(i => (i.date || '') === d).sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
           const cur = $('#x-item', root).value || e.itemId;
-          $('#x-item', root).innerHTML = `<option value="">연결 안 함</option>` + list.map(i => `<option value="${i.id}" ${i.id === cur ? 'selected' : ''}>${esc(i.time || '')} ${esc(i.title)}</option>`).join('');
+          const opt = (id, label) => `<option value="${id}" ${id === cur ? 'selected' : ''}>${esc(label)}</option>`;
+          $('#x-item', root).innerHTML = `<option value="">연결 안 함</option>`
+            + (list.length ? `<optgroup label="이날 일정">${list.map(i => opt(i.id, `${i.time || ''} ${i.title}`)).join('')}</optgroup>` : '')
+            + ((t.flights || []).length ? `<optgroup label="항공편">${sortFlights(t.flights).map(f => opt(f.id, linkTitle(t, f.id))).join('')}</optgroup>` : '')
+            + ((t.stays || []).length ? `<optgroup label="숙소">${t.stays.map(s => opt(s.id, s.name)).join('')}</optgroup>` : '');
         };
         const upd = () => {
           const amt = parseAmount(val(root, 'x-amt')), c = $('#x-cur', root).value, k = parseAmount(val(root, 'x-krw'));
@@ -912,9 +1046,11 @@
         $('#x-cur', root).addEventListener('change', upd);
         $('#x-date', root).addEventListener('change', fillItems);
         $('#x-item', root).addEventListener('change', () => {
-          const it = (t.items || []).find(i => i.id === $('#x-item', root).value);
-          if (it && !val(root, 'x-title')) $('#x-title', root).value = it.title;
-          if (it && isNew) { const r = root.querySelector(`input[name=x-cat][value="${TYPE_TO_EXP[it.type] || 'etc'}"]`); if (r) r.checked = true; }
+          const id = $('#x-item', root).value;
+          const it = (t.items || []).find(i => i.id === id);
+          const cat = it ? (TYPE_TO_EXP[it.type] || 'etc') : (t.flights || []).some(f => f.id === id) ? 'flight' : (t.stays || []).some(s => s.id === id) ? 'stay' : '';
+          if (id && !val(root, 'x-title')) $('#x-title', root).value = linkTitle(t, id);
+          if (cat && isNew) { const r = root.querySelector(`input[name=x-cat][value="${cat}"]`); if (r) r.checked = true; }
         });
         $('#x-del', root)?.addEventListener('click', () => { t.expenses = t.expenses.filter(x => x.id !== e.id); save(); close(); render(); toast('경비를 삭제했어요'); });
         $('#sheet-form', root).addEventListener('submit', ev => {
@@ -1009,7 +1145,11 @@
           $('#f-aterm', root).placeholder = suggestTerminal(tmp, 'arr') ? suggestTerminal(tmp, 'arr') + ' (추정)' : '';
         };
         root.addEventListener('input', upd); upd();
-        $('#f-del', root)?.addEventListener('click', () => { t.flights = t.flights.filter(x => x.id !== f.id); save(); close(); render(); toast('항공편을 삭제했어요'); });
+        $('#f-del', root)?.addEventListener('click', () => {
+          t.flights = t.flights.filter(x => x.id !== f.id);
+          (t.expenses || []).forEach(e => { if (e.itemId === f.id) e.itemId = ''; });
+          save(); close(); render(); toast('항공편을 삭제했어요');
+        });
         $('#sheet-form', root).addEventListener('submit', e => {
           e.preventDefault();
           const data = {
@@ -1165,6 +1305,7 @@
       startDate: date(t.startDate), endDate: date(t.endDate), memo: str(t.memo, 2000),
       dayTitles: Object.fromEntries(Object.entries(titles).filter(([k]) => date(k)).map(([k, v]) => [k, str(v, 80)])),
       items: arr(t.items).map(i => ({ id: sid(i.id), date: date(i.date), time: time(i.time), endTime: time(i.endTime), type: Object.prototype.hasOwnProperty.call(TYPE_LABEL, i.type) ? i.type : 'etc', title: str(i.title, 200), place: str(i.place, 200), memo: str(i.memo, 2000), cost: str(i.cost, 100) })),
+      stays: arr(t.stays).map(s => ({ id: sid(s.id), name: str(s.name, 120), address: str(s.address, 200), checkIn: date(s.checkIn), checkInTime: time(s.checkInTime), checkOut: date(s.checkOut), checkOutTime: time(s.checkOutTime), confirmNo: str(s.confirmNo, 40), phone: str(s.phone, 40), memo: str(s.memo, 500) })),
       flights: arr(t.flights).map(f => ({ id: sid(f.id), flightNo: str(f.flightNo, 10), dep: str(f.dep, 3).toUpperCase(), arr: str(f.arr, 3).toUpperCase(), depName: str(f.depName, 80), arrName: str(f.arrName, 80), depDate: date(f.depDate), depTime: time(f.depTime), arrDate: date(f.arrDate), arrTime: time(f.arrTime), depTerminal: str(f.depTerminal, 10), arrTerminal: str(f.arrTerminal, 10), gate: str(f.gate, 10), counter: str(f.counter, 20), seat: str(f.seat, 40), pnr: str(f.pnr, 20), memo: str(f.memo, 1000) })),
       people: Number(t.people) >= 1 && Number(t.people) <= 50 ? Math.round(Number(t.people)) : '',
       currency: typeof t.currency === 'string' && has(CUR, t.currency) ? t.currency : '',
@@ -1270,12 +1411,13 @@
         <label class="check-inline"><input type="checkbox" id="p-airports" checked> 공항 정보 (터미널·주차장·팁)</label>
         <label class="check-inline"><input type="checkbox" id="p-plan" checked> 일차별 일정</label>
         <label class="check-inline"><input type="checkbox" id="p-check" checked> 준비 체크리스트</label>
+        <label class="check-inline"><input type="checkbox" id="p-stays" checked> 숙소</label>
         <label class="check-inline"><input type="checkbox" id="p-money" checked> 경비</label>
       </div>
       <div class="ap-preview" id="p-msg">${IN_FRAME ? '미리보기 화면에서는 PDF 저장·인쇄가 막혀 있어요. 실제 앱 주소에서 이용하세요.' : 'A4 세로로 만들어요. 아이폰에서는 공유 시트가 열리면 “파일에 저장”이나 카카오톡으로 보낼 수 있어요.'}</div>`,
       `<button type="button" class="btn left" id="p-print">인쇄</button><button type="button" class="btn" data-close="1">취소</button><button type="submit" class="btn primary">${ICON.doc}PDF 만들기</button>`,
       (root, close) => {
-        const opts = () => ({ flights: $('#p-flights', root).checked, airports: $('#p-airports', root).checked, plan: $('#p-plan', root).checked, check: $('#p-check', root).checked, money: $('#p-money', root).checked });
+        const opts = () => ({ flights: $('#p-flights', root).checked, airports: $('#p-airports', root).checked, plan: $('#p-plan', root).checked, check: $('#p-check', root).checked, money: $('#p-money', root).checked, stays: $('#p-stays', root).checked });
         $('#p-print', root).addEventListener('click', () => {
           const pr = $('#print-root'); pr.innerHTML = ''; pr.appendChild(buildReport(t, opts()));
           close(); setTimeout(() => window.print(), 50);
@@ -1338,11 +1480,18 @@
         </div>`).join('');
       }
     }
+    if (o.stays && (t.stays || []).length) {
+      h += `<h2>숙소</h2><table><thead><tr><th>숙소</th><th>체크인</th><th>체크아웃</th><th>예약번호 · 전화</th></tr></thead><tbody>
+        ${[...t.stays].sort((a, b) => (a.checkIn || '').localeCompare(b.checkIn || '')).map(s => `<tr><td><b>${esc(s.name)}</b>${s.address ? `<br><span style="color:#5B6472">${esc(s.address)}</span>` : ''}${s.memo ? `<br><span style="color:#5B6472">${esc(s.memo)}</span>` : ''}</td><td style="white-space:nowrap">${s.checkIn ? fmtD(s.checkIn) : '-'} ${esc(s.checkInTime || '')}</td><td style="white-space:nowrap">${s.checkOut ? fmtD(s.checkOut) : '-'} ${esc(s.checkOutTime || '')}<br>${nightsBetween(s)}박</td><td>${esc(s.confirmNo || '-')}${s.phone ? `<br>${esc(s.phone)}` : ''}</td></tr>`).join('')}
+      </tbody></table>`;
+    }
     if (o.plan && days.length) {
       h += `<h2>일차별 일정</h2>` + days.map((d, i) => {
         const es = dayEntries(t, d);
         return `<div class="r-day-head"><b>${i + 1}일차</b><span>${fmtDLong(d)}</span><strong>${esc((t.dayTitles || {})[d] || '')}</strong></div>
-          ${es.length ? `<table><tbody>${es.map(e => e.kind === 'item'
+          ${es.length ? `<table><tbody>${es.map(e => e.s
+            ? `<tr><td class="t">${esc((e.kind === 'checkin' ? e.s.checkInTime : e.s.checkOutTime) || '')}</td><td style="width:44px;color:#5B6472">숙소</td><td><b>${e.kind === 'checkin' ? '체크인' : '체크아웃'} · ${esc(e.s.name)}</b></td></tr>`
+            : e.kind === 'item'
             ? `<tr><td class="t">${esc(e.i.time || '—')}${e.i.endTime ? '~' + esc(e.i.endTime) : ''}</td><td style="width:44px;color:#5B6472">${TYPE_LABEL[e.i.type] || ''}</td><td><b>${esc(e.i.title)}</b>${e.i.place ? ` · ${esc(e.i.place)}` : ''}${e.i.memo ? `<br><span style="color:#5B6472">${esc(e.i.memo)}</span>` : ''}${e.i.cost ? `<br><span style="color:#5B6472">${esc(e.i.cost)}</span>` : ''}</td></tr>`
             : `<tr><td class="t">${esc(e.kind === 'arrive' ? e.f.arrTime : e.f.depTime)}</td><td style="width:44px;color:#5B6472">항공</td><td><div class="r-flight"><span class="c">${esc(e.f.dep)} → ${esc(e.f.arr)}</span><span>${esc(e.f.flightNo)} ${esc(e.f.depTime)}–${esc(e.f.arrTime)}</span><span>${esc(terminalOf(e.f, 'dep').v)}${e.f.counter ? ' · 카운터 ' + esc(e.f.counter) : ''}${e.f.gate ? ' · 게이트 ' + esc(e.f.gate) : ''}</span></div></td></tr>`).join('')}</tbody></table>`
             : `<div style="color:#5B6472;padding:4px 6px">일정 없음</div>`}`;
@@ -1390,9 +1539,14 @@
     if (e.target.closest('[data-stop]')) return;
     const el = e.target.closest('[data-act]'); if (!el) return;
     const act = el.dataset.act, id = el.dataset.id, t = curTrip();
-    if (ro() && ['edit-trip', 'add-item', 'edit-item', 'day-title', 'add-flight', 'edit-flight', 'edit-check', 'del-check', 'load-template', 'share', 'add-exp', 'add-exp-item', 'edit-exp', 'edit-rate', 'fetch-rates'].includes(act)) return;
+    if (ro() && ['add-stay', 'edit-stay', 'add-exp-flight', 'add-exp-stay', 'edit-trip', 'add-item', 'edit-item', 'day-title', 'add-flight', 'edit-flight', 'edit-check', 'del-check', 'load-template', 'share', 'add-exp', 'add-exp-item', 'edit-exp', 'edit-rate', 'fetch-rates'].includes(act)) return;
     switch (act) {
       case 'add-exp': expSheet(t, null); break;
+      case 'add-stay': staySheet(t, null); break;
+      case 'edit-stay': staySheet(t, (t.stays || []).find(x => x.id === id)); break;
+      case 'add-exp-flight': { const f = t.flights.find(x => x.id === id); if (f) expSheet(t, null, flightPreset(t, f)); break; }
+      case 'add-exp-stay': { const st = (t.stays || []).find(x => x.id === id); if (st) expSheet(t, null, stayPreset(st)); break; }
+      case 'goto-stay': ui.tab = 'stay'; render(); setTimeout(() => $('#st-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30); break;
       case 'add-exp-item': { const it = t.items.find(x => x.id === id); if (it) expSheet(t, null, expPreset(it)); break; }
       case 'edit-exp': expSheet(t, (t.expenses || []).find(x => x.id === id)); break;
       case 'edit-rate': rateSheet(t, el.dataset.cur); break;
