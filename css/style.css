@@ -195,18 +195,6 @@ body::before {
 .tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
 .tabs .count { font-family: var(--font-mono); font-size: 12px; font-weight: 500; margin-left: 2px; }
 
-/* ───── 일차 요약 스트립 ───── */
-.day-strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 8px; scrollbar-width: thin; }
-.day-pill {
-  flex: none; display: grid; gap: 2px; min-width: 104px; max-width: 150px; text-align: left;
-  padding: 8px 10px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--surface); cursor: pointer;
-}
-.day-pill .dn { font-family: var(--font-display); font-weight: 700; font-size: 18px; line-height: 1; }
-.day-pill .dd { font-size: 12px; color: var(--muted); }
-.day-pill .dt { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.day-pill.today { border-color: var(--ok); }
-.day-pill .cnt { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
-
 /* ───── 일차 섹션 & 타임라인 ───── */
 .day { margin-top: 18px; scroll-margin-top: 130px; }
 .day-head { display: flex; align-items: flex-end; gap: 10px; padding-bottom: 8px; border-bottom: 2px solid var(--ink); }
@@ -268,9 +256,12 @@ body::before {
 .pass-route .tm { font-family: var(--font-mono); font-size: 17px; font-weight: 500; }
 .pass-route .mid { text-align: center; color: var(--sign-muted); font-size: 12px; padding-bottom: 6px; }
 .pass-route .mid svg { width: 26px; height: 26px; color: var(--sign-fg); display: block; margin: 0 auto 2px; }
-.pass-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; border-top: 1px dashed var(--line); background: var(--surface); }
-.pass-fields div { padding: 8px 12px; border-right: 1px solid var(--line); min-width: 0; }
-.pass-fields div:last-child { border-right: 0; }
+/* 공항 동선 순서: 터미널 → 발권 카운터 → 게이트 / 좌석 · 예약번호 */
+.pass-fields { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0; border-top: 1px dashed var(--line); background: var(--surface); margin: 0; }
+.pass-fields div { grid-column: span 2; padding: 8px 12px; border-right: 1px solid var(--line); min-width: 0; }
+.pass-fields div:nth-child(-n+3) { border-bottom: 1px solid var(--line); }
+.pass-fields div:nth-child(n+4) { grid-column: span 3; }
+.pass-fields div:nth-child(3), .pass-fields div:nth-child(5) { border-right: 0; }
 .pass-fields dt { font-size: 11px; color: var(--muted); letter-spacing: .06em; }
 .pass-fields dd { margin: 0; font-family: var(--font-mono); font-size: 15px; font-weight: 500; overflow-wrap: anywhere; }
 .est { font-family: var(--font-body); font-size: 10px; font-weight: 600; color: var(--warn); margin-left: 3px; letter-spacing: 0; }
@@ -285,6 +276,7 @@ body::before {
 .ap h4 { margin: 0 0 4px; font-size: 12px; letter-spacing: .06em; color: var(--muted); font-weight: 700; }
 .ap ul { margin: 0; padding-left: 18px; font-size: 13px; display: grid; gap: 4px; }
 .gate-box { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 8px 10px; font-size: 13px; background: var(--surface-2); }
+.gate-box .gl { display: block; font-size: 11px; font-weight: 700; letter-spacing: .06em; color: var(--muted); margin-bottom: 2px; }
 .gate-box .g { font-family: var(--font-display); font-size: 26px; font-weight: 700; line-height: 1; margin-right: 6px; }
 .gate-box.warn { border-color: var(--warn); background: var(--warn-soft); }
 .park { display: grid; gap: 6px; }
@@ -421,9 +413,6 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 
 @media (max-width: 560px) {
   .airport-pair { grid-template-columns: 1fr; }
-  .pass-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .pass-fields div:nth-child(2) { border-right: 0; }
-  .pass-fields div:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
   .pass-route .code { font-size: 40px; }
   .add-check { grid-template-columns: 1fr 1fr; }
   .add-check input[type=text] { grid-column: 1 / -1; }

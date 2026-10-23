@@ -214,7 +214,7 @@
       startDate: d[0], endDate: d[3], memo: '앱 사용법을 보여 주는 예시 여행이에요. 확인 후 지워도 돼요.',
       dayTitles: { [d[0]]: '도착 · 난바', [d[1]]: '유니버설 스튜디오', [d[2]]: '교토 당일치기', [d[3]]: '쇼핑 · 귀국' },
       flights: [
-        { id: uid(), flightNo: 'KE723', dep: 'ICN', arr: 'KIX', depDate: d[0], depTime: '08:30', arrDate: d[0], arrTime: '10:20', depTerminal: '', arrTerminal: '', gate: '', seat: '32A·B·C', pnr: '', memo: '예시 항공편이에요. 실제 시간과 다를 수 있어요.' },
+        { id: uid(), flightNo: 'KE723', dep: 'ICN', arr: 'KIX', depDate: d[0], depTime: '08:30', arrDate: d[0], arrTime: '10:20', depTerminal: '', arrTerminal: '', counter: '', gate: '', seat: '32A·B·C', pnr: '', memo: '예시 항공편이에요. 실제 시간과 다를 수 있어요.' },
         { id: uid(), flightNo: 'KE724', dep: 'KIX', arr: 'ICN', depDate: d[3], depTime: '15:30', arrDate: d[3], arrTime: '17:20', depTerminal: '', arrTerminal: '', gate: '', seat: '', pnr: '', memo: '' }
       ],
       items: [
@@ -271,6 +271,10 @@
     if (v) return { v, est: false };
     const s = suggestTerminal(f, side);
     return { v: s, est: !!s };
+  }
+  function counterHint(f) {
+    if (f.counter) return '발권(체크인) 카운터예요. 국제선 카운터는 보통 출발 1시간 전에 마감되니 늦지 않게 가세요.';
+    return '출발 당일 공항 전광판이나 항공사 앱에서 확인하세요. 온라인 체크인을 했고 부칠 짐이 없으면 카운터를 거치지 않아도 되는 경우가 많아요.';
   }
   function gateHint(f) {
     const ap = findAp(f.dep);
@@ -429,15 +433,8 @@
     const money = expTotals(t);
     if (!days.length) return ro() ? `<div class="empty">여행 날짜가 없는 일정이에요.</div>` : `<div class="empty">여행 날짜를 먼저 입력해 주세요.<br><button class="btn primary sm" data-act="edit-trip" style="margin-top:10px">여행 정보 입력</button></div>`;
     const today = todayStr();
-    const strip = days.map((d, i) => {
-      const n = dayEntries(t, d).length;
-      return `<button class="day-pill ${d === today ? 'today' : ''}" data-act="jump" data-date="${d}">
-        <span class="dn">${i + 1}일차</span><span class="dd num">${fmtD(d)}</span>
-        <span class="dt">${esc((t.dayTitles || {})[d] || '')}&nbsp;</span><span class="cnt">일정 ${n}개</span></button>`;
-    }).join('');
     const outside = (t.items || []).filter(i => !days.includes(i.date));
     return `
-      <div class="day-strip">${strip}</div>
       ${days.map((d, i) => daySection(t, d, i, today, money)).join('')}
       ${outside.length ? `<section class="day"><div class="day-head"><div class="info"><div class="title">여행 기간 밖 일정</div><div class="date">날짜를 바꾸면 해당 일차로 옮겨져요</div></div></div>
         <ul class="timeline">${outside.map(i => itemRow(i, true, money)).join('')}</ul></section>` : ''}`;
@@ -487,7 +484,7 @@
     const dt = terminalOf(f, 'dep');
     const sub = arriveOnly
       ? `${esc(f.flightNo)} 도착 · ${esc(apName(f.arr, f.arrName))}`
-      : [airlineName(f.flightNo), dt.v ? `${dt.v}${dt.est ? '(추정)' : ''}` : '', f.gate ? `게이트 ${f.gate}` : '', f.seat ? `좌석 ${f.seat}` : ''].filter(Boolean).map(esc).join(' · ');
+      : [airlineName(f.flightNo), dt.v ? `${dt.v}${dt.est ? '(추정)' : ''}` : '', f.counter ? `카운터 ${f.counter}` : '', f.gate ? `게이트 ${f.gate}` : '', f.seat ? `좌석 ${f.seat}` : ''].filter(Boolean).map(esc).join(' · ');
     return `
       <li class="tl-item flight">
         <div class="tl-time">${esc(arriveOnly ? f.arrTime : f.depTime || '—')}</div>
@@ -528,7 +525,8 @@
         </div>
         <dl class="pass-fields">
           <div><dt>출발 터미널</dt><dd>${esc(dt.v || '-')}${dt.est ? '<span class="est">추정</span>' : ''}</dd></div>
-          <div><dt>게이트</dt><dd>${esc(f.gate || '-')}</dd></div>
+          <div><dt>발권 카운터</dt><dd>${esc(f.counter || '-')}</dd></div>
+          <div><dt>탑승 게이트</dt><dd>${esc(f.gate || '-')}</dd></div>
           <div><dt>좌석</dt><dd>${esc(f.seat || '-')}</dd></div>
           <div><dt>예약번호</dt><dd>${esc(f.pnr || '-')}</dd></div>
         </dl>
@@ -567,7 +565,8 @@
           <span class="en">${esc(ap.en)} · ${esc(ap.city)}, ${esc(ap.country)}</span>
           <span class="tzl">${esc(tzLabel(ap, date))}</span>
         </div>
-        ${hint ? `<div class="gate-box ${hint.warn ? 'warn' : ''}">${f.gate ? `<span class="g">${esc(f.gate)}</span>` : '<b>게이트 미정</b> · '}${esc(hint.text)}${hint.warn ? ' <b>입력한 터미널과 게이트가 맞지 않아요. 다시 확인하세요.</b>' : ''}</div>` : ''}
+        ${side === 'dep' ? `<div class="gate-box"><span class="gl">발권 카운터</span>${f.counter ? `<span class="g">${esc(f.counter)}</span>` : '<b>미정</b> · '}${esc(counterHint(f))}</div>` : ''}
+        ${hint ? `<div class="gate-box ${hint.warn ? 'warn' : ''}"><span class="gl">탑승 게이트</span>${f.gate ? `<span class="g">${esc(f.gate)}</span>` : '<b>게이트 미정</b> · '}${esc(hint.text)}${hint.warn ? ' <b>입력한 터미널과 게이트가 맞지 않아요. 다시 확인하세요.</b>' : ''}</div>` : ''}
         ${term.est ? `<div class="note-small">터미널은 항공사 기준 추정값이에요. 항공권·항공사 안내로 확인하세요.</div>` : ''}
         ${hasMore ? `<details class="ap-more" ${first ? 'open' : ''}><summary>${first ? '공항 안내' : '공항 안내 (위와 같음)'}${showPark ? ' · 주차장' : ''}</summary><div class="ap-more-body">` : ''}
         ${ap.notes && ap.notes.length ? `<div><h4>알아두면 좋은 점</h4><ul>${ap.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul></div>` : ''}
@@ -924,10 +923,13 @@
         <label class="field"><span>도착 날짜 <span class="hint">비우면 출발일</span></span><input type="date" id="f-adate" value="${esc(f.arrDate)}"></label>
         <label class="field"><span>도착 시간 (현지)</span><input type="time" id="f-atime" value="${esc(f.arrTime)}"></label>
       </div>
-      <div class="grid3">
+      <div class="grid2">
         <label class="field"><span>출발 터미널</span><input type="text" id="f-dterm" value="${esc(f.depTerminal)}" placeholder=""></label>
         <label class="field"><span>도착 터미널</span><input type="text" id="f-aterm" value="${esc(f.arrTerminal)}" placeholder=""></label>
-        <label class="field"><span>게이트</span><input type="text" id="f-gate" value="${esc(f.gate)}" placeholder="당일 확인" inputmode="text"></label>
+      </div>
+      <div class="grid2">
+        <label class="field"><span>발권 카운터</span><input type="text" id="f-counter" value="${esc(f.counter || '')}" placeholder="예: H열 · 당일 확인" autocapitalize="characters"></label>
+        <label class="field"><span>탑승 게이트</span><input type="text" id="f-gate" value="${esc(f.gate)}" placeholder="당일 확인" inputmode="text"></label>
       </div>
       <div class="grid2">
         <label class="field"><span>좌석</span><input type="text" id="f-seat" value="${esc(f.seat)}" placeholder="32A"></label>
@@ -957,7 +959,7 @@
             flightNo: val(root, 'f-no').toUpperCase().replace(/\s/g, ''), dep: val(root, 'f-dep').toUpperCase(), arr: val(root, 'f-arr').toUpperCase(),
             depName: val(root, 'f-depName'), arrName: val(root, 'f-arrName'),
             depDate: val(root, 'f-ddate'), depTime: val(root, 'f-dtime'), arrDate: val(root, 'f-adate'), arrTime: val(root, 'f-atime'),
-            depTerminal: val(root, 'f-dterm').toUpperCase(), arrTerminal: val(root, 'f-aterm').toUpperCase(), gate: val(root, 'f-gate').toUpperCase(),
+            depTerminal: val(root, 'f-dterm').toUpperCase(), arrTerminal: val(root, 'f-aterm').toUpperCase(), gate: val(root, 'f-gate').toUpperCase(), counter: val(root, 'f-counter').toUpperCase(),
             seat: val(root, 'f-seat').toUpperCase(), pnr: val(root, 'f-pnr').toUpperCase(), memo: val(root, 'f-memo')
           };
           if (!data.arrDate) data.arrDate = data.depDate;
@@ -1106,7 +1108,7 @@
       startDate: date(t.startDate), endDate: date(t.endDate), memo: str(t.memo, 2000),
       dayTitles: Object.fromEntries(Object.entries(titles).filter(([k]) => date(k)).map(([k, v]) => [k, str(v, 80)])),
       items: arr(t.items).map(i => ({ id: sid(i.id), date: date(i.date), time: time(i.time), endTime: time(i.endTime), type: Object.prototype.hasOwnProperty.call(TYPE_LABEL, i.type) ? i.type : 'etc', title: str(i.title, 200), place: str(i.place, 200), memo: str(i.memo, 2000), cost: str(i.cost, 100) })),
-      flights: arr(t.flights).map(f => ({ id: sid(f.id), flightNo: str(f.flightNo, 10), dep: str(f.dep, 3).toUpperCase(), arr: str(f.arr, 3).toUpperCase(), depName: str(f.depName, 80), arrName: str(f.arrName, 80), depDate: date(f.depDate), depTime: time(f.depTime), arrDate: date(f.arrDate), arrTime: time(f.arrTime), depTerminal: str(f.depTerminal, 10), arrTerminal: str(f.arrTerminal, 10), gate: str(f.gate, 10), seat: str(f.seat, 40), pnr: str(f.pnr, 20), memo: str(f.memo, 1000) })),
+      flights: arr(t.flights).map(f => ({ id: sid(f.id), flightNo: str(f.flightNo, 10), dep: str(f.dep, 3).toUpperCase(), arr: str(f.arr, 3).toUpperCase(), depName: str(f.depName, 80), arrName: str(f.arrName, 80), depDate: date(f.depDate), depTime: time(f.depTime), arrDate: date(f.arrDate), arrTime: time(f.arrTime), depTerminal: str(f.depTerminal, 10), arrTerminal: str(f.arrTerminal, 10), gate: str(f.gate, 10), counter: str(f.counter, 20), seat: str(f.seat, 40), pnr: str(f.pnr, 20), memo: str(f.memo, 1000) })),
       people: Number(t.people) >= 1 && Number(t.people) <= 50 ? Math.round(Number(t.people)) : '',
       currency: typeof t.currency === 'string' && has(CUR, t.currency) ? t.currency : '',
       rates: Object.fromEntries(Object.entries(t.rates && typeof t.rates === 'object' ? t.rates : {})
@@ -1264,9 +1266,9 @@
     let h = `<div class="r-crumb">${esc(t.year)} · ${esc(t.country)}</div><h1>${esc(t.city)}${t.subtitle ? ` <span style="font-size:15px;font-weight:500;color:#5B6472">${esc(t.subtitle)}</span>` : ''}</h1>
       <div class="r-dates">${fmtDLong(t.startDate)} – ${fmtDLong(t.endDate)} · ${nightsLabel(t)}</div>${t.memo ? `<div style="margin-top:6px">${esc(t.memo)}</div>` : ''}`;
     if (o.flights && fs.length) {
-      h += `<h2>항공편</h2><table><thead><tr><th>편명</th><th>날짜</th><th>구간</th><th>시간(현지)</th><th>터미널</th><th>게이트</th><th>좌석</th><th>예약번호</th></tr></thead><tbody>
-        ${fs.map(f => { const dt = terminalOf(f, 'dep'), at = terminalOf(f, 'arr'); return `<tr><td><b>${esc(f.flightNo)}</b><br>${esc(airlineName(f.flightNo))}</td><td>${fmtD(f.depDate)}</td><td>${esc(f.dep)} ${esc(apName(f.dep, f.depName))}<br>→ ${esc(f.arr)} ${esc(apName(f.arr, f.arrName))}</td><td>${esc(f.depTime)} → ${esc(f.arrTime)}${f.arrDate && f.arrDate !== f.depDate ? ' (+' + diffDays(f.depDate, f.arrDate) + ')' : ''}<br>${esc(flightDuration(f))}</td><td>${esc(dt.v)}${dt.est ? '(추정)' : ''} → ${esc(at.v)}${at.est ? '(추정)' : ''}</td><td>${esc(f.gate || '당일 확인')}</td><td>${esc(f.seat)}</td><td>${esc(f.pnr)}</td></tr>`; }).join('')}
-      </tbody></table>`;
+      h += `<h2>항공편</h2><table><thead><tr><th>편명</th><th>날짜</th><th>구간</th><th>시간(현지)</th><th>터미널</th><th>발권 카운터 · 게이트</th><th>좌석 · 예약번호</th></tr></thead><tbody>
+        ${fs.map(f => { const dt = terminalOf(f, 'dep'), at = terminalOf(f, 'arr'); return `<tr><td style="white-space:nowrap"><b>${esc(f.flightNo)}</b><br>${esc(airlineName(f.flightNo))}</td><td style="white-space:nowrap">${fmtD(f.depDate)}</td><td>${esc(f.dep)} ${esc(apName(f.dep, f.depName))}<br>→ ${esc(f.arr)} ${esc(apName(f.arr, f.arrName))}</td><td>${esc(f.depTime)} → ${esc(f.arrTime)}${f.arrDate && f.arrDate !== f.depDate ? ' (+' + diffDays(f.depDate, f.arrDate) + ')' : ''}<br>${esc(flightDuration(f))}</td><td style="white-space:nowrap">${esc(dt.v || '-')}${dt.est ? '*' : ''} → ${esc(at.v || '-')}${at.est ? '*' : ''}</td><td>카운터 ${esc(f.counter || '당일 확인')}<br>게이트 ${esc(f.gate || '당일 확인')}</td><td>${esc(f.seat || '-')}${f.pnr ? `<br>${esc(f.pnr)}` : ''}</td></tr>`; }).join('')}
+      </tbody></table>${fs.some(f => terminalOf(f, 'dep').est || terminalOf(f, 'arr').est) ? '<div style="color:#5B6472;margin-top:4px">* 항공사 기준 추정 터미널</div>' : ''}`;
     }
     if (o.airports && fs.length) {
       const codes = []; fs.forEach(f => [f.dep, f.arr].forEach(c => { if (c && !codes.includes(c)) codes.push(c); }));
@@ -1285,7 +1287,7 @@
         return `<div class="r-day-head"><b>${i + 1}일차</b><span>${fmtDLong(d)}</span><strong>${esc((t.dayTitles || {})[d] || '')}</strong></div>
           ${es.length ? `<table><tbody>${es.map(e => e.kind === 'item'
             ? `<tr><td class="t">${esc(e.i.time || '—')}${e.i.endTime ? '~' + esc(e.i.endTime) : ''}</td><td style="width:44px;color:#5B6472">${TYPE_LABEL[e.i.type] || ''}</td><td><b>${esc(e.i.title)}</b>${e.i.place ? ` · ${esc(e.i.place)}` : ''}${e.i.memo ? `<br><span style="color:#5B6472">${esc(e.i.memo)}</span>` : ''}${e.i.cost ? `<br><span style="color:#5B6472">${esc(e.i.cost)}</span>` : ''}</td></tr>`
-            : `<tr><td class="t">${esc(e.kind === 'arrive' ? e.f.arrTime : e.f.depTime)}</td><td style="width:44px;color:#5B6472">항공</td><td><div class="r-flight"><span class="c">${esc(e.f.dep)} → ${esc(e.f.arr)}</span><span>${esc(e.f.flightNo)} ${esc(e.f.depTime)}–${esc(e.f.arrTime)}</span><span>${esc(terminalOf(e.f, 'dep').v)}${e.f.gate ? ' · 게이트 ' + esc(e.f.gate) : ''}</span></div></td></tr>`).join('')}</tbody></table>`
+            : `<tr><td class="t">${esc(e.kind === 'arrive' ? e.f.arrTime : e.f.depTime)}</td><td style="width:44px;color:#5B6472">항공</td><td><div class="r-flight"><span class="c">${esc(e.f.dep)} → ${esc(e.f.arr)}</span><span>${esc(e.f.flightNo)} ${esc(e.f.depTime)}–${esc(e.f.arrTime)}</span><span>${esc(terminalOf(e.f, 'dep').v)}${e.f.counter ? ' · 카운터 ' + esc(e.f.counter) : ''}${e.f.gate ? ' · 게이트 ' + esc(e.f.gate) : ''}</span></div></td></tr>`).join('')}</tbody></table>`
             : `<div style="color:#5B6472;padding:4px 6px">일정 없음</div>`}`;
       }).join('');
     }
@@ -1346,7 +1348,6 @@
       case 'edit-trip': tripSheet(t); break;
       case 'tab': ui.tab = el.dataset.tab; render(); break;
       case 'pdf': pdfSheet(t); break;
-      case 'jump': $('#day-' + el.dataset.date)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
       case 'day-title': dayTitleSheet(t, el.dataset.date); break;
       case 'add-item': itemSheet(t, null, el.dataset.date); break;
       case 'edit-item': itemSheet(t, t.items.find(x => x.id === id)); break;
