@@ -503,7 +503,7 @@
     const seen = new Set();
     return `
       <div class="section-title"><h2>항공편</h2>${ro() ? '' : `<button class="btn primary sm" data-act="add-flight">${ICON.plus}항공편 추가</button>`}</div>
-      <div class="info-note">편명과 출발·도착 공항 코드를 넣으면 공항 이름, 터미널(추정), 시차, 비행시간, 주차장, 지도 링크가 자동으로 나와요. 게이트는 출발 당일 정해지므로 <b>직접 입력</b>하고 <b>실시간 확인</b> 링크로 다시 확인하세요.</div>
+      <div class="info-note">편명과 출발·도착 공항 코드를 넣으면 공항 이름, 터미널(추정), 시차, 비행시간, 주차장, 지도 링크가 자동으로 나와요. 발권 카운터와 게이트는 출발 당일 정해지므로 카드의 <b>실시간 확인</b> 버튼으로 찾아 넣으세요.</div>
       ${fs.length ? fs.map(f => flightCard(t, f, seen)).join('') : `<div class="empty">등록된 항공편이 없어요.</div>`}`;
   }
 
@@ -530,16 +530,32 @@
           <div><dt>좌석</dt><dd>${esc(f.seat || '-')}</dd></div>
           <div><dt>예약번호</dt><dd>${esc(f.pnr || '-')}</dd></div>
         </dl>
+        ${liveLinks(f, fno, da)}
         <div class="airport-pair">
           ${airportPanel(f, da, 'dep', dt, seen)}
           ${airportPanel(f, aa, 'arr', at, seen)}
         </div>
         ${f.memo ? `<div class="ap" style="border-top:1px solid var(--line)"><div class="note-small">${esc(f.memo)}</div></div>` : ''}
-        <div class="flight-actions">
-          ${fno ? `<div class="links" style="margin-right:auto"><a href="https://www.google.com/search?q=${encodeURIComponent(fno + ' flight status')}" target="_blank" rel="noopener">실시간 게이트·지연 확인 ↗</a><a href="https://www.flightradar24.com/data/flights/${encodeURIComponent(fno.toLowerCase())}" target="_blank" rel="noopener">Flightradar24 ↗</a></div>` : ''}
-          ${ro() ? '' : `<button class="btn sm" data-act="edit-flight" data-id="${f.id}">${ICON.edit}수정</button>`}
-        </div>
+        ${ro() ? '' : `<div class="flight-actions"><button class="btn sm" data-act="edit-flight" data-id="${f.id}">${ICON.edit}수정</button></div>`}
       </article>`;
+  }
+
+  // 터미널·발권 카운터·게이트·지연을 바로 확인하는 링크 (편명으로 검색)
+  function liveLinks(f, fno, ap) {
+    if (!fno) return '';
+    const q = encodeURIComponent;
+    const links = [
+      ['구글', `https://www.google.com/search?q=${q(fno + ' flight status')}`],
+      ['네이버', `https://search.naver.com/search.naver?query=${q(fno + ' 항공편')}`]
+    ];
+    if (ap) links.push([`${ap.ko.replace(/국제공항$/, '공항')} 운항정보`, ap.site || `https://www.google.com/search?q=${q(ap.en + ' departures ' + fno)}`]);
+    links.push(['Flightradar24', `https://www.flightradar24.com/data/flights/${q(fno.toLowerCase())}`]);
+    return `
+      <div class="live">
+        <div class="live-head"><b>실시간 확인</b><span>터미널 · 발권 카운터 · 게이트 · 지연</span></div>
+        <div class="live-links">${links.map(([l, u]) => `<a class="btn sm" href="${u}" target="_blank" rel="noopener">${esc(l)} ↗</a>`).join('')}</div>
+        <div class="note-small">구글·네이버는 편명 ${esc(fno)}으로 바로 검색돼요. ${ap && ap.site ? '공항 사이트는 첫 화면의 운항정보에서 편명을 검색하세요. 발권 카운터는 구글보다 공항 사이트에 나오는 경우가 많아요.' : '공항 링크는 검색 결과로 열려요.'}</div>
+      </div>`;
   }
 
   function airportPanel(f, ap, side, term, seen) {
