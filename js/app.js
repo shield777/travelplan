@@ -24,7 +24,8 @@
     trash: svg('<path d="M4 7h16M9 7V4h6v3M6.5 7l1 13h9l1-13"/>'),
     doc: svg('<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 13h6M9 17h6"/>'),
     close: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
-    save: svg('<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>')
+    save: svg('<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>'),
+    share: svg('<path d="M12 15V3M7.5 7.5L12 3l4.5 4.5M5 12v8h14v-8"/>')
   };
   const TYPES = [
     { id: 'move', label: '이동' }, { id: 'sight', label: '관광' }, { id: 'food', label: '식사' },
@@ -87,7 +88,11 @@
     try { return JSON.parse(localStorage.getItem(UI_KEY)) || { view: 'home' }; } catch (e) { return { view: 'home' }; }
   }
   function saveUI() { try { localStorage.setItem(UI_KEY, JSON.stringify(ui)); } catch (e) { /* 무시 */ } }
-  const curTrip = () => state.trips.find(t => t.id === ui.tripId);
+  let sharedTrip = null; // 공유 링크로 받아서 아직 저장하지 않은 여행
+  let sharedLink = '';
+  const ro = () => ui.view === 'shared'; // 보기 전용 화면인지
+  const curTrip = () => ro() ? sharedTrip : state.trips.find(t => t.id === ui.tripId);
+  const standalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 
   // ───────── 기본 체크리스트 ─────────
   const TEMPLATE = [
@@ -224,6 +229,7 @@
 
   function render() {
     const trip = curTrip();
+    if (ro() && trip) { renderTrip(trip); return; }
     if (ui.view === 'trip' && trip) renderTrip(trip); else { ui.view = 'home'; renderHome(); }
     saveUI();
   }
@@ -238,7 +244,7 @@
       <div class="wrap">
         <header class="topbar">
           <div class="grow brand">여행일정</div>
-          <button class="btn sm" data-act="backup">백업</button>
+          <button class="btn sm" data-act="backup">불러오기</button>
           <button class="btn primary sm" data-act="new-trip">${ICON.plus}새 여행</button>
         </header>
         ${trips.length === 0 ? `<div class="empty">아직 여행이 없어요.<br>오른쪽 위 <b>새 여행</b>으로 연도·나라·여행지를 입력해 시작하세요.</div>` : ''}
@@ -257,7 +263,7 @@
     return `
       <button class="trip-card" data-act="open-trip" data-id="${t.id}">
         <div>
-          <div class="crumb">${esc(t.year || '')} · <b>${esc(t.country || '나라 미정')}</b>${t.example ? '<span class="example-badge">예시</span>' : ''}</div>
+          <div class="crumb">${esc(t.year || '')} · <b>${esc(t.country || '나라 미정')}</b>${t.example ? '<span class="example-badge">예시</span>' : ''}${t.receivedAt ? '<span class="recv-badge">공유받음</span>' : ''}</div>
           <h3>${esc(t.city || '여행지 미정')}</h3>
           ${t.subtitle ? `<div class="sub">${esc(t.subtitle)}</div>` : ''}
         </div>
@@ -277,10 +283,12 @@
     app.innerHTML = `
       <div class="wrap">
         <header class="topbar">
-          <button class="btn icon ghost" data-act="home" aria-label="여행 목록">${ICON.back}</button>
+          <button class="btn icon ghost" data-act="${ro() ? 'close-shared' : 'home'}" aria-label="${ro() ? '닫기' : '여행 목록'}">${ICON.back}</button>
           <div class="grow"></div>
           <button class="btn sm" data-act="pdf">${ICON.doc}PDF</button>
-          <button class="btn sm" data-act="edit-trip">${ICON.edit}여행 정보</button>
+          ${ro()
+            ? `<button class="btn primary sm" data-act="save-shared">${ICON.save}내 앱에 저장</button>`
+            : `<button class="btn sm" data-act="share">${ICON.share}공유</button><button class="btn sm" data-act="edit-trip">${ICON.edit}여행 정보</button>`}
         </header>
         <section class="trip-head">
           <div>
@@ -290,6 +298,11 @@
           </div>
           <span class="dchip ${dd.cls}">${dd.text}</span>
         </section>
+        ${ro() ? `<div class="shared-banner">
+          <b>공유받은 일정 · 보기 전용${t.shareMeta && t.shareMeta.at ? ` · ${fmtD(t.shareMeta.at)}에 보냄` : ''}</b>
+          <span>보낸 사람이 일정을 바꾸면 새 링크를 다시 받아야 해요.${standalone() ? '' : ' 홈 화면의 여행일정 앱에 넣으려면 링크를 복사한 뒤, 앱의 <b>불러오기</b>에 붙여넣으세요.'}</span>
+          ${standalone() || !sharedLink ? '' : `<button class="btn sm" data-act="copy-shared">링크 복사</button>`}
+        </div>` : ''}
         <nav class="tabs" role="tablist">
           <button role="tab" aria-selected="${tab === 'plan'}" data-act="tab" data-tab="plan">일정</button>
           <button role="tab" aria-selected="${tab === 'flights'}" data-act="tab" data-tab="flights">항공·공항<span class="count">${(t.flights || []).length || ''}</span></button>
@@ -309,7 +322,7 @@
 
   function planTab(t) {
     const days = tripDays(t);
-    if (!days.length) return `<div class="empty">여행 날짜를 먼저 입력해 주세요.<br><button class="btn primary sm" data-act="edit-trip" style="margin-top:10px">여행 정보 입력</button></div>`;
+    if (!days.length) return ro() ? `<div class="empty">여행 날짜가 없는 일정이에요.</div>` : `<div class="empty">여행 날짜를 먼저 입력해 주세요.<br><button class="btn primary sm" data-act="edit-trip" style="margin-top:10px">여행 정보 입력</button></div>`;
     const today = todayStr();
     const strip = days.map((d, i) => {
       const n = dayEntries(t, d).length;
@@ -334,13 +347,14 @@
           <div class="no">${i + 1}<small>일차</small></div>
           <div class="info">
             <div class="date">${fmtDLong(d)}${d === today ? '<span class="today-tag">오늘</span>' : ''}</div>
-            <div class="title ${title ? '' : 'placeholder'}" data-act="day-title" data-date="${d}" role="button" tabindex="0">${title ? esc(title) : '이 날의 제목 (예: 교토 당일치기)'}</div>
+            ${ro() ? (title ? `<div class="title">${esc(title)}</div>` : '')
+              : `<div class="title ${title ? '' : 'placeholder'}" data-act="day-title" data-date="${d}" role="button" tabindex="0">${title ? esc(title) : '이 날의 제목 (예: 교토 당일치기)'}</div>`}
           </div>
         </div>
         ${entries.length ? `<ul class="timeline">${entries.map(e => e.kind === 'item' ? itemRow(e.i) : flightRow(e.f, e.kind === 'arrive')).join('')}</ul>` : ''}
-        <div class="add-row" ${entries.length ? '' : 'style="padding-left:0"'}>
+        ${ro() ? (entries.length ? '' : '<div class="note-small" style="padding-top:8px">일정 없음</div>') : `<div class="add-row" ${entries.length ? '' : 'style="padding-left:0"'}>
           <button class="btn sm" data-act="add-item" data-date="${d}">${ICON.plus}일정 추가</button>
-        </div>
+        </div>`}
       </section>`;
   }
 
@@ -349,7 +363,7 @@
       <li class="tl-item">
         <div class="tl-time">${esc(i.time || '—')}${i.endTime ? `<small>~${esc(i.endTime)}</small>` : ''}${showDate ? `<small>${fmtD(i.date)}</small>` : ''}</div>
         <div class="tl-rail"><span class="tl-dot"></span></div>
-        <div class="tl-card" data-act="edit-item" data-id="${i.id}" role="button" tabindex="0">
+        <div class="tl-card" ${ro() ? '' : `data-act="edit-item" data-id="${i.id}" role="button" tabindex="0"`}>
           <div class="tl-type">${ICON[i.type] || ICON.etc}${TYPE_LABEL[i.type] || '기타'}</div>
           <div class="tl-title">${esc(i.title)}</div>
           ${i.place ? `<div class="tl-place"><a href="${mapUrl(i.place)}" target="_blank" rel="noopener" data-stop="1">${esc(i.place)} ↗</a></div>` : ''}
@@ -381,7 +395,7 @@
     const fs = sortFlights(t.flights || []);
     const seen = new Set();
     return `
-      <div class="section-title"><h2>항공편</h2><button class="btn primary sm" data-act="add-flight">${ICON.plus}항공편 추가</button></div>
+      <div class="section-title"><h2>항공편</h2>${ro() ? '' : `<button class="btn primary sm" data-act="add-flight">${ICON.plus}항공편 추가</button>`}</div>
       <div class="info-note">편명과 출발·도착 공항 코드를 넣으면 공항 이름, 터미널(추정), 시차, 비행시간, 주차장, 지도 링크가 자동으로 나와요. 게이트는 출발 당일 정해지므로 <b>직접 입력</b>하고 <b>실시간 확인</b> 링크로 다시 확인하세요.</div>
       ${fs.length ? fs.map(f => flightCard(t, f, seen)).join('') : `<div class="empty">등록된 항공편이 없어요.</div>`}`;
   }
@@ -415,7 +429,7 @@
         ${f.memo ? `<div class="ap" style="border-top:1px solid var(--line)"><div class="note-small">${esc(f.memo)}</div></div>` : ''}
         <div class="flight-actions">
           ${fno ? `<div class="links" style="margin-right:auto"><a href="https://www.google.com/search?q=${encodeURIComponent(fno + ' flight status')}" target="_blank" rel="noopener">실시간 게이트·지연 확인 ↗</a><a href="https://www.flightradar24.com/data/flights/${encodeURIComponent(fno.toLowerCase())}" target="_blank" rel="noopener">Flightradar24 ↗</a></div>` : ''}
-          <button class="btn sm" data-act="edit-flight" data-id="${f.id}">${ICON.edit}수정</button>
+          ${ro() ? '' : `<button class="btn sm" data-act="edit-flight" data-id="${f.id}">${ICON.edit}수정</button>`}
         </div>
       </article>`;
   }
@@ -476,19 +490,19 @@
         <div class="bar"><i style="width:${pct}%"></i></div>
         ${over ? `<div class="note-small" style="color:var(--warn);font-weight:600">기한이 지난 항목이 ${over}개 있어요.</div>` : ''}
       </div>
-      ${list.length === 0 ? `<div class="empty">준비 항목이 없어요.<br><button class="btn sm" data-act="load-template" style="margin-top:10px">기본 준비 리스트 불러오기</button></div>` : ''}
+      ${list.length === 0 ? (ro() ? `<div class="empty">함께 보낸 준비 항목이 없어요.</div>` : `<div class="empty">준비 항목이 없어요.<br><button class="btn sm" data-act="load-template" style="margin-top:10px">기본 준비 리스트 불러오기</button></div>`) : ''}
       ${cats.map(c => {
         const items = list.filter(x => (x.cat || '기타') === c);
         return `<section class="cat"><h3>${esc(c)} <span class="num">${items.filter(x => x.done).length}/${items.length}</span></h3>
           <ul class="check-list">${items.map(x => checkRow(t, x, today)).join('')}</ul></section>`;
       }).join('')}
-      <form class="add-check" id="add-check-form">
+      ${ro() ? '' : `<form class="add-check" id="add-check-form">
         <input type="text" id="new-check-text" placeholder="새 할 일 (예: 유모차 대여 예약)" aria-label="새 할 일" required>
         <select id="new-check-cat" aria-label="분류">${CATS.map(c => `<option>${c}</option>`).join('')}</select>
         <select id="new-check-due" aria-label="기한">${DUE_OPTS.map(([v, l]) => `<option value="${v ?? ''}">${l}</option>`).join('')}</select>
         <button class="btn primary" type="submit">${ICON.plus}추가</button>
       </form>
-      ${list.length ? `<div style="margin-top:10px;text-align:right"><button class="btn sm ghost" data-act="load-template">기본 항목 다시 추가</button></div>` : ''}`;
+      ${list.length ? `<div style="margin-top:10px;text-align:right"><button class="btn sm ghost" data-act="load-template">기본 항목 다시 추가</button></div>` : ''}`}`;
   }
   function dueDate(t, c) { return (c.due == null || c.due === '' || !t.startDate) ? null : addDays(t.startDate, -Number(c.due)); }
   function isOver(t, c, today) { const d = dueDate(t, c); return d ? today > d : false; }
@@ -497,13 +511,13 @@
     const over = !c.done && isOver(t, c, today);
     return `
       <li class="check-item ${c.done ? 'done' : ''}">
-        <label class="box"><input type="checkbox" data-act="toggle-check" data-id="${c.id}" ${c.done ? 'checked' : ''} aria-label="${esc(c.text)} 완료"></label>
-        <div class="txt" data-act="edit-check" data-id="${c.id}" role="button" tabindex="0">
+        <label class="box"><input type="checkbox" data-act="toggle-check" data-id="${c.id}" ${c.done ? 'checked' : ''} ${ro() ? 'disabled' : ''} aria-label="${esc(c.text)} 완료"></label>
+        <div class="txt" ${ro() ? '' : `data-act="edit-check" data-id="${c.id}" role="button" tabindex="0"`}>
           <div class="t">${esc(c.text)}</div>
           ${d ? `<div class="due ${over ? 'over' : ''}">${Number(c.due) === 0 ? '출발일' : 'D-' + c.due}까지 · ${fmtD(d)}${over ? ' · 기한 지남' : ''}</div>` : ''}
           ${c.memo ? `<div class="memo">${esc(c.memo)}</div>` : ''}
         </div>
-        <button class="btn icon ghost sm del" data-act="del-check" data-id="${c.id}" aria-label="삭제">${ICON.trash}</button>
+        ${ro() ? '' : `<button class="btn icon ghost sm del" data-act="del-check" data-id="${c.id}" aria-label="삭제">${ICON.trash}</button>`}
       </li>`;
   }
 
@@ -713,13 +727,22 @@
 
   // ───────── 백업 ─────────
   function backupSheet() {
-    openSheet('백업 · 복원', `
+    openSheet('불러오기 · 백업', `
+      <label class="field"><span>받은 공유 링크 열기</span><textarea id="b-link" style="min-height:64px" placeholder="카톡으로 받은 링크를 길게 눌러 복사한 뒤 여기에 붙여넣으세요"></textarea></label>
+      <button type="button" class="btn primary" id="b-open">링크 열기</button>
+      <hr class="sep">
       <p style="margin:0" class="note-small">여행 데이터는 지금 쓰는 기기의 브라우저에만 저장돼요. 아이폰과 아이패드는 서로 공유되지 않으니, 백업 파일을 iCloud Drive에 저장해 두고 다른 기기에서 불러오세요.</p>
       <button type="button" class="btn" id="b-export">${ICON.save}백업 파일 만들기 (.json)</button>
       <label class="field"><span>백업 파일 불러오기</span><input type="file" id="b-import" accept="application/json,.json"></label>
       <div class="ap-preview" id="b-msg"></div>`,
       `<button type="button" class="btn" data-close="1">닫기</button>`,
       (root, close) => {
+        $('#b-open', root).addEventListener('click', () => {
+          const text = val(root, 'b-link'); const m = text.match(SHARE_RE);
+          if (!m) { $('#b-msg', root).textContent = '공유 링크를 찾지 못했어요. 링크 전체를 붙여넣었는지 확인하세요.'; return; }
+          const url = (text.match(/https?:\/\/\S+/) || [])[0] || '';
+          openShared(m[1], url);
+        });
         $('#b-export', root).addEventListener('click', () => {
           const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
           deliverFile(blob, `여행일정-백업-${todayStr()}.json`);
@@ -732,7 +755,7 @@
               const data = JSON.parse(r.result);
               if (!data || !Array.isArray(data.trips)) throw new Error('형식 오류');
               let added = 0, updated = 0;
-              data.trips.forEach(tr => {
+              data.trips.map(normalizeTrip).forEach(tr => {
                 const i = state.trips.findIndex(x => x.id === tr.id);
                 if (i >= 0) { state.trips[i] = tr; updated++; } else { state.trips.push(tr); added++; }
               });
@@ -758,6 +781,149 @@
     const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
     if (IN_FRAME) toast('미리보기 화면에서는 파일 저장이 막혀 있어요. 실제 앱 주소에서 이용하세요.');
+  }
+
+  // ───────── 공유 링크 ─────────
+  // 일정 전체를 압축해서 주소의 # 뒤에 담아요. # 뒤는 서버로 전송되지 않아서 일정이 어디에도 저장되지 않아요.
+  const SHARE_RE = /(?:#s=)?([01]\.[A-Za-z0-9_-]{10,})/;
+  const b64u = bytes => {
+    let s = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  };
+  const unb64u = str => {
+    const s = atob(str.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((str.length + 3) % 4));
+    const b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return b;
+  };
+  const pipeBytes = async (bytes, stream) => new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer());
+
+  async function encodeShare(trip) {
+    const bytes = new TextEncoder().encode(JSON.stringify({ v: 1, trip }));
+    if (window.CompressionStream) {
+      try { return '1.' + b64u(await pipeBytes(bytes, new CompressionStream('deflate-raw'))); } catch (e) { /* 압축 없이 */ }
+    }
+    return '0.' + b64u(bytes);
+  }
+  async function decodeShare(code) {
+    if (code.length > 300000) throw new Error('too-long');
+    const [kind, body] = [code[0], code.slice(2)];
+    let bytes = unb64u(body);
+    if (kind === '1') {
+      if (!window.DecompressionStream) throw new Error('unsupported');
+      bytes = await pipeBytes(bytes, new DecompressionStream('deflate-raw'));
+    }
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }
+  function shareable(t, o) {
+    const c = JSON.parse(JSON.stringify(t));
+    delete c.receivedAt;
+    if (!o.pnr) (c.flights || []).forEach(f => { f.pnr = ''; });
+    if (!o.check) c.checklist = [];
+    c.shareMeta = { pnr: !!o.pnr, check: !!o.check, at: todayStr() };
+    return c;
+  }
+
+  // 다른 사람이 만든 데이터라서, 화면에 넣기 전에 형식을 하나하나 확인해요
+  function normalizeTrip(t) {
+    t = t && typeof t === 'object' ? t : {};
+    const arr = v => Array.isArray(v) ? v.filter(x => x && typeof x === 'object') : [];
+    const sid = v => (typeof v === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(v)) ? v : uid();
+    const str = (v, n) => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '').slice(0, n);
+    const date = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '';
+    const time = v => typeof v === 'string' && /^\d{2}:\d{2}$/.test(v) ? v : '';
+    const titles = t.dayTitles && typeof t.dayTitles === 'object' ? t.dayTitles : {};
+    const out = {
+      id: sid(t.id), example: !!t.example, year: Number(t.year) || '', country: str(t.country, 40), city: str(t.city, 60), subtitle: str(t.subtitle, 80),
+      startDate: date(t.startDate), endDate: date(t.endDate), memo: str(t.memo, 2000),
+      dayTitles: Object.fromEntries(Object.entries(titles).filter(([k]) => date(k)).map(([k, v]) => [k, str(v, 80)])),
+      items: arr(t.items).map(i => ({ id: sid(i.id), date: date(i.date), time: time(i.time), endTime: time(i.endTime), type: Object.prototype.hasOwnProperty.call(TYPE_LABEL, i.type) ? i.type : 'etc', title: str(i.title, 200), place: str(i.place, 200), memo: str(i.memo, 2000), cost: str(i.cost, 100) })),
+      flights: arr(t.flights).map(f => ({ id: sid(f.id), flightNo: str(f.flightNo, 10), dep: str(f.dep, 3).toUpperCase(), arr: str(f.arr, 3).toUpperCase(), depName: str(f.depName, 80), arrName: str(f.arrName, 80), depDate: date(f.depDate), depTime: time(f.depTime), arrDate: date(f.arrDate), arrTime: time(f.arrTime), depTerminal: str(f.depTerminal, 10), arrTerminal: str(f.arrTerminal, 10), gate: str(f.gate, 10), seat: str(f.seat, 40), pnr: str(f.pnr, 20), memo: str(f.memo, 1000) })),
+      checklist: arr(t.checklist).map(c => ({ id: sid(c.id), text: str(c.text, 200), cat: CATS.includes(c.cat) ? c.cat : '기타', due: (c.due === null || c.due === '' || c.due === undefined || !Number.isFinite(Number(c.due))) ? null : Math.max(0, Math.min(365, Math.round(Number(c.due)))), done: !!c.done, memo: str(c.memo, 500) }))
+    };
+    if (date(t.receivedAt)) out.receivedAt = t.receivedAt;
+    if (t.shareMeta && typeof t.shareMeta === 'object') out.shareMeta = { pnr: !!t.shareMeta.pnr, check: !!t.shareMeta.check, at: date(t.shareMeta.at) };
+    return out;
+  }
+
+  async function openShared(code, link) {
+    try {
+      const data = await decodeShare(code);
+      const t = normalizeTrip(data && data.trip);
+      if (!t.city && !t.country) throw new Error('empty');
+      sharedTrip = t; sharedLink = link || `${location.origin}${location.pathname}#s=${code}`;
+      if (sheetClose) sheetClose();
+      ui.view = 'shared'; ui.tab = 'plan'; render(); window.scrollTo(0, 0);
+    } catch (e) {
+      toast(e && e.message === 'unsupported' ? '이 브라우저에서는 열 수 없어요. iOS 16.4 이상 Safari에서 열어 주세요.' : '공유 링크를 읽지 못했어요. 링크가 중간에 잘리지 않았는지 확인하세요.');
+    }
+  }
+  function clearShareHash() {
+    if (SHARE_RE.test(location.hash)) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* 무시 */ } }
+  }
+  function closeShared() { sharedTrip = null; ui.view = 'home'; clearShareHash(); render(); window.scrollTo(0, 0); }
+  function saveShared() {
+    const t = JSON.parse(JSON.stringify(sharedTrip));
+    const meta = t.shareMeta || {}; delete t.shareMeta;
+    const ex = state.trips.find(x => x.id === t.id);
+    const doSave = () => {
+      if (ex) {
+        // 함께 보내지 않은 내용은 내 기기에 있던 값을 그대로 둬요
+        if (!meta.check) t.checklist = ex.checklist || [];
+        if (!meta.pnr) t.flights.forEach(f => { const o = (ex.flights || []).find(y => y.id === f.id); if (o && o.pnr) f.pnr = o.pnr; });
+        state.trips[state.trips.indexOf(ex)] = t;
+      } else state.trips.push(t);
+      t.receivedAt = todayStr();
+      save(); sharedTrip = null; clearShareHash();
+      ui.view = 'trip'; ui.tripId = t.id; render(); window.scrollTo(0, 0);
+      toast(ex ? '받은 일정으로 바꿨어요' : '내 앱에 저장했어요');
+    };
+    if (ex) confirmSheet('이미 저장된 여행이에요. 받은 일정으로 바꿀까요? 이 기기에서 고친 내용은 사라져요.', '바꾸기', doSave); else doSave();
+  }
+
+  function copyText(text) {
+    const fallback = () => {
+      const ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select(); let ok = false; try { ok = document.execCommand('copy'); } catch (e) { /* 무시 */ } ta.remove();
+      toast(ok ? '링크를 복사했어요' : '복사가 안 돼요. 링크 칸을 길게 눌러 복사하세요');
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => toast('링크를 복사했어요'), fallback); else fallback();
+  }
+
+  function shareSheet(t) {
+    let link = '';
+    openSheet('가족에게 일정 공유', `
+      <p class="note-small" style="margin:0">링크를 받은 가족은 앱을 설치하지 않아도 바로 일정을 볼 수 있어요. <b>보내는 시점의 일정</b>이 담기니, 일정을 바꾼 뒤에는 링크를 다시 보내 주세요.</p>
+      <div class="field"><span>함께 보낼 내용</span>
+        <label class="check-inline"><input type="checkbox" id="s-check" checked> 준비 체크리스트 (체크 상태 포함)</label>
+        <label class="check-inline"><input type="checkbox" id="s-pnr"> 항공 예약번호</label>
+        <div class="note-small">예약번호는 이름과 함께 있으면 예약 변경·취소에 쓰일 수 있어서 기본으로 빼 뒀어요.</div>
+      </div>
+      <label class="field"><span>공유 링크</span><input type="text" id="s-link" readonly value="만드는 중…"></label>
+      <div class="ap-preview" id="s-msg"></div>`,
+      `<button type="button" class="btn" id="s-copy" disabled>링크 복사</button><button type="submit" class="btn primary" disabled>${ICON.share}카톡·메시지로 보내기</button>`,
+      (root) => {
+        const btns = root.querySelectorAll('#s-copy, button[type=submit]');
+        const gen = async () => {
+          btns.forEach(b => { b.disabled = true; });
+          const code = await encodeShare(shareable(t, { check: $('#s-check', root).checked, pnr: $('#s-pnr', root).checked }));
+          link = `${location.origin}${location.pathname}#s=${code}`;
+          $('#s-link', root).value = link;
+          const msgs = [];
+          if (IN_FRAME) msgs.push('미리보기 화면에서 만든 링크는 가족이 열 수 없어요. 실제 앱 주소에 올린 뒤에 보내세요. (복사해서 불러오기에 붙여넣으면 받는 화면은 미리 볼 수 있어요)');
+          if (link.length > 6000) msgs.push(`링크가 길어요(${link.length.toLocaleString()}자). 일부 앱에서 잘릴 수 있으니 체크리스트를 빼거나 PDF로 보내 보세요.`);
+          $('#s-msg', root).textContent = msgs.join(' ');
+          btns.forEach(b => { b.disabled = false; });
+        };
+        root.addEventListener('change', e => { if (e.target.type === 'checkbox') gen(); });
+        gen();
+        $('#s-link', root).addEventListener('focus', e => e.target.select());
+        $('#s-copy', root).addEventListener('click', () => copyText(link));
+        $('#sheet-form', root).addEventListener('submit', e => {
+          e.preventDefault();
+          if (navigator.share) navigator.share({ title: tripName(t), text: `${tripName(t)} 여행 일정이에요.`, url: link }).catch(err => { if (err && err.name !== 'AbortError') copyText(link); });
+          else copyText(link);
+        });
+      });
   }
 
   // ───────── PDF ─────────
@@ -867,7 +1033,12 @@
     if (e.target.closest('[data-stop]')) return;
     const el = e.target.closest('[data-act]'); if (!el) return;
     const act = el.dataset.act, id = el.dataset.id, t = curTrip();
+    if (ro() && ['edit-trip', 'add-item', 'edit-item', 'day-title', 'add-flight', 'edit-flight', 'edit-check', 'del-check', 'load-template', 'share'].includes(act)) return;
     switch (act) {
+      case 'share': shareSheet(t); break;
+      case 'save-shared': saveShared(); break;
+      case 'close-shared': closeShared(); break;
+      case 'copy-shared': copyText(sharedLink); break;
       case 'new-trip': tripSheet(null); break;
       case 'backup': backupSheet(); break;
       case 'open-trip': ui.tripId = id; ui.view = 'trip'; ui.tab = ui.tab || 'plan'; render(); window.scrollTo(0, 0); break;
@@ -901,7 +1072,7 @@
   });
   app.addEventListener('change', e => {
     const el = e.target;
-    if (el.dataset.act === 'toggle-check') {
+    if (el.dataset.act === 'toggle-check' && !ro()) {
       const t = curTrip(); const c = t.checklist.find(x => x.id === el.dataset.id);
       c.done = el.checked; save(); render();
     }
@@ -917,5 +1088,9 @@
   window.addEventListener('afterprint', () => { $('#print-root').innerHTML = ''; });
 
   if (state.seeded) { delete state.seeded; save(); }
+  if (ui.view === 'shared') ui.view = 'home';
   render();
+  const openFromHash = () => { const m = location.hash.match(/^#s=([01]\.[A-Za-z0-9_-]+)$/); if (m) openShared(m[1], location.href); };
+  openFromHash();
+  window.addEventListener('hashchange', openFromHash);
 })();

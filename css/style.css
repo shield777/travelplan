@@ -162,6 +162,17 @@ body::before {
   padding: 1px 7px; border-radius: 999px; background: var(--warn-soft); color: var(--warn); vertical-align: middle; margin-left: 6px;
 }
 
+.recv-badge {
+  display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .04em;
+  padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); vertical-align: middle; margin-left: 6px;
+}
+.shared-banner {
+  display: grid; gap: 4px; justify-items: start; margin-bottom: 12px; padding: 10px 12px;
+  border-radius: var(--r-sm); border: 1px solid var(--accent); background: var(--accent-soft); font-size: 13px;
+}
+.shared-banner > b { color: var(--accent); }
+.sep { border: 0; border-top: 1px solid var(--line); width: 100%; margin: 4px 0; }
+
 .empty {
   border: 1px dashed var(--line); border-radius: var(--r); padding: 20px; text-align: center; color: var(--muted); background: var(--surface);
 }
@@ -329,7 +340,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .form { display: grid; gap: 12px; }
 .check-inline { display: flex; align-items: center; gap: 8px; font-size: 14px; }
-.check-inline input { width: 20px; height: 20px; }
+.check-inline input { width: 20px; height: 20px; accent-color: var(--accent); }
 .ap-preview { font-size: 12px; color: var(--muted); min-height: 1.2em; }
 .ap-preview b { color: var(--ink); }
 .type-pick { display: flex; flex-wrap: wrap; gap: 6px; }
