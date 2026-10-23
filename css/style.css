@@ -336,7 +336,9 @@ body::before {
 .stay-info dd { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
 
 .h2-cost { margin-left: 8px; font-family: var(--font-display); font-size: 20px; font-weight: 700; color: var(--accent); }
-.cost-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.won-input { position: relative; }
+.won-input input[type=text] { padding-right: 36px; text-align: right; font-family: var(--font-mono); }
+.won-input span { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 15px; pointer-events: none; }
 .cost-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; padding: 10px 16px; border-top: 1px solid var(--line); }
 .cost-line span { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .06em; }
 .cost-line b { font-size: 16px; font-weight: 500; }

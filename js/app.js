@@ -249,7 +249,7 @@
     const ex = (date, title, cat, amount, currency, pay, itemId, krw) => ({ id: uid(), date, title, cat, amount, currency, pay, itemId: itemId || '', krw: krw == null ? null : krw, memo: '' });
     t.expenses = [
       ex('', '항공권 왕복 3명 (예시)', 'flight', 1350000, 'KRW', 'card', t.flights[0].id),
-      ex('', '난바 호텔 3박 (예시)', 'stay', 96000, 'JPY', 'card', t.stays[0].id, 873400),
+      ex('', '난바 호텔 3박 (예시)', 'stay', 873400, 'KRW', 'card', t.stays[0].id),
       ex('', '여행자보험 3명 (예시)', 'prep', 38000, 'KRW', 'card', (list.find(c => c.text.startsWith('여행자보험')) || {}).id),
       ex(d[0], '라피트 3명', 'move', 4040, 'JPY', 'card', it('난카이')),
       ex(d[0], '오코노미야키 점심', 'food', 4800, 'JPY', 'cash', it('점심')),
@@ -967,28 +967,17 @@
   const expPreset = item => ({ date: item.date, itemId: item.id, title: item.title, cat: TYPE_TO_EXP[item.type] || 'etc' });
   const checkPreset = c => ({ date: '', itemId: c.id, title: shortText(c.text), cat: 'prep', currency: 'KRW' });
 
-  // 항공편·숙소 입력창 안의 비용 칸. 연결된 비용이 한 건이면 그 비용을 고치고, 여러 건이면 경비 탭에서 고치도록 안내해요
-  function sheetCostHtml(t, refId, defCur, label, hint) {
+  // 항공편·숙소 입력창 안의 비용 칸 (원화로만 입력). 연결된 비용이 한 건이면 그 비용을 고치고, 여러 건이면 경비 탭에서 고치도록 안내해요
+  function sheetCostHtml(t, refId, label, hint) {
     const linked = refId ? (t.expenses || []).filter(e => e.itemId === refId) : [];
     if (linked.length > 1) {
       const krw = linked.reduce((a, e) => a + (krwOf(t, e) || 0), 0);
       return `<div class="field"><span>${label}</span><div class="note-small">비용이 ${linked.length}건 들어 있어요 (합계 ${fmtNum(krw)}원). 경비 탭에서 고치세요.</div></div>`;
     }
     const e = linked[0];
-    const cur = e ? e.currency : defCur;
-    const curOpts = Array.from(new Set([cur, defCur, 'KRW', ...Object.keys(CUR)]));
-    return `<div class="field"><span>${label} <span class="hint">(선택) ${hint}</span></span>
-      <div class="cost-pair"><input type="text" id="c-amt" inputmode="decimal" value="${e ? esc(e.amount) : ''}" placeholder="0" autocomplete="off" aria-label="${label} 금액">
-      <select id="c-cur" aria-label="통화">${curOpts.map(c => `<option value="${c}" ${c === cur ? 'selected' : ''}>${c} · ${CUR[c][0]}</option>`).join('')}</select></div>
-      <div class="krw-preview" id="c-prev"></div></div>`;
-  }
-  function wireSheetCost(t, root) {
-    const amt = $('#c-amt', root); if (!amt) return;
-    const upd = () => {
-      const a = parseAmount(amt.value), c = $('#c-cur', root).value;
-      $('#c-prev', root).innerHTML = !amt.value.trim() || !a ? '' : c === 'KRW' ? '' : rateOf(t, c) ? `≈ <b>${fmtNum(Math.round(a * rateOf(t, c)))}원</b> <span>(${esc(rateLabel(t, c))})</span>` : `${esc(curUnit(c))} 환율은 저장하면 자동으로 불러와 볼게요.`;
-    };
-    amt.addEventListener('input', upd); $('#c-cur', root).addEventListener('change', upd); upd();
+    const v = e ? (e.currency === 'KRW' ? e.amount : krwOf(t, e)) : null;
+    return `<label class="field"><span>${label} <span class="hint">(선택) ${hint}</span></span>
+      <div class="won-input"><input type="text" id="c-amt" inputmode="numeric" value="${v == null ? '' : fmtNum(v)}" placeholder="0" autocomplete="off"><span>원</span></div></label>`;
   }
   // 저장 전에 금액 확인. 잘못 넣었으면 오류 문구를 돌려줘요
   function checkSheetCost(root) {
@@ -1000,12 +989,11 @@
     t.expenses = t.expenses || [];
     const ex = t.expenses.find(e => e.itemId === refId);
     if (!amt.value.trim()) { if (ex) t.expenses = t.expenses.filter(x => x !== ex); return; }
-    const amount = parseAmount(amt.value), currency = $('#c-cur', root).value;
+    const amount = Math.round(parseAmount(amt.value));
     if (ex) {
-      if (ex.amount !== amount || ex.currency !== currency) ex.krw = null; // 금액이 바뀌면 예전 실결제액은 맞지 않아요
-      Object.assign(ex, { amount, currency });
-    } else t.expenses.push({ id: uid(), date: '', itemId: refId, title: meta.title, cat: meta.cat, amount, currency, krw: null, pay: 'card', memo: '' });
-    if (currency !== 'KRW' && !rateOf(t, currency)) setTimeout(() => updateRates(t, [currency], true), 0);
+      if (ex.currency !== 'KRW' && krwOf(t, ex) === amount) return; // 예전에 외화로 넣은 비용을 안 바꿨으면 그대로 둬요
+      Object.assign(ex, { amount, currency: 'KRW', krw: null });
+    } else t.expenses.push({ id: uid(), date: '', itemId: refId, title: meta.title, cat: meta.cat, amount, currency: 'KRW', krw: null, pay: 'card', memo: '' });
   }
 
   // 숙소 입력
@@ -1027,12 +1015,11 @@
         <label class="field"><span>예약번호</span><input type="text" id="s-conf" value="${esc(s.confirmNo)}" autocapitalize="characters"></label>
         <label class="field"><span>전화번호</span><input type="text" id="s-phone" value="${esc(s.phone)}" inputmode="tel"></label>
       </div>
-      ${sheetCostHtml(t, s.id, tripCurrency(t), '숙박비', '넣으면 경비 탭에 함께 들어가요')}
+      ${sheetCostHtml(t, s.id, '숙박비', '넣으면 경비 탭에 함께 들어가요')}
       <label class="field"><span>메모</span><input type="text" id="s-memo" value="${esc(s.memo)}" placeholder="예: 트리플룸, 조식 포함"></label>
       <div class="ap-preview" id="s-err" style="color:var(--warn)"></div>`,
       `${isNew ? '' : `<button type="button" class="btn danger left" id="s-del">${ICON.trash}삭제</button>`}<button type="button" class="btn" data-close="1">취소</button><button type="submit" class="btn primary">저장</button>`,
       (root, close) => {
-        wireSheetCost(t, root);
         $('#s-in', root).addEventListener('change', () => { const a = val(root, 's-in'), b = $('#s-out', root); if (a && (!b.value || b.value < a)) b.value = a; });
         $('#s-del', root)?.addEventListener('click', () => {
           t.stays = t.stays.filter(x => x.id !== s.id);
@@ -1188,7 +1175,7 @@
         <label class="field"><span>좌석</span><input type="text" id="f-seat" value="${esc(f.seat)}" placeholder="32A"></label>
         <label class="field"><span>예약번호</span><input type="text" id="f-pnr" value="${esc(f.pnr)}" autocapitalize="characters"></label>
       </div>
-      ${sheetCostHtml(t, f.id, 'KRW', '항공권 비용', '왕복 항공권이면 가는 편에만 넣으세요')}
+      ${sheetCostHtml(t, f.id, '항공권 비용', '왕복 항공권이면 가는 편에만 넣으세요')}
       <label class="field"><span>메모</span><textarea id="f-memo">${esc(f.memo)}</textarea></label>
       <div class="ap-preview" id="f-err" style="color:var(--warn)"></div>
       <div class="note-small">터미널을 비워 두면 항공사 기준으로 추정해서 보여 줘요. 시간은 각 공항의 현지 시간으로 입력하세요.</div>`,
@@ -1207,7 +1194,6 @@
           $('#f-aterm', root).placeholder = suggestTerminal(tmp, 'arr') ? suggestTerminal(tmp, 'arr') + ' (추정)' : '';
         };
         root.addEventListener('input', upd); upd();
-        wireSheetCost(t, root);
         $('#f-del', root)?.addEventListener('click', () => {
           t.flights = t.flights.filter(x => x.id !== f.id);
           (t.expenses || []).forEach(e => { if (e.itemId === f.id) e.itemId = ''; });
