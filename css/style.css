@@ -284,6 +284,17 @@ body::before {
 .park-item { display: grid; grid-template-columns: 26px 1fr; gap: 8px; align-items: start; font-size: 13px; }
 .park-item .p { width: 26px; height: 26px; border-radius: 5px; background: #1F5FBF; color: #FFFFFF; font-weight: 700; font-family: var(--font-display); font-size: 18px; display: grid; place-items: center; line-height: 1; }
 .park-item b { display: block; font-size: 14px; }
+.ptag { display: inline-block; margin: 2px 0 2px; font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: 4px; background: var(--warn-soft); color: var(--warn); }
+.nav-btns { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.nav-btns .btn { min-height: 32px; padding: 0 10px; font-size: 13px; }
+.nav-web { font-size: 12px; }
+.park-other { margin-top: 8px; }
+.park-other summary { cursor: pointer; font-size: 13px; color: var(--accent); font-weight: 600; padding: 4px 0; }
+.park-other .park { padding-top: 6px; }
+.near-tip { font-size: 13px; padding: 6px 10px; border-radius: var(--r-sm); background: var(--accent-soft); margin-bottom: 8px; }
+.near-tip span { color: var(--muted); font-size: 11px; }
+.res-box { margin-top: 8px; font-size: 12px; padding: 8px 10px; border: 1px dashed var(--line); border-radius: var(--r-sm); color: var(--muted); }
+.res-box b { color: var(--ink); margin-right: 4px; }
 .park-item .lk { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; }
 .links { display: flex; flex-wrap: wrap; gap: 6px; }
 .links a { font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); text-decoration: none; color: var(--ink); background: var(--surface); }

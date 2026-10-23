@@ -543,6 +543,43 @@
       </article>`;
   }
 
+  // 주차장: 국내 공항은 카카오맵·티맵·네이버 앱으로 바로 열기, 해외는 지도 링크
+  const NAV_APPNAME = location.hostname || 'travelplan';
+  function navButtons(q) {
+    const e = encodeURIComponent(q);
+    return `<div class="nav-btns">
+      <a class="btn sm" href="kakaomap://search?q=${e}">카카오맵</a>
+      <a class="btn sm" href="tmap://search?name=${e}" data-copy="${esc(q)}">티맵</a>
+      <a class="btn sm" href="nmap://search?query=${e}&amp;appname=${encodeURIComponent(NAV_APPNAME)}">네이버</a>
+      <a class="nav-web" href="${naverUrl(q)}" target="_blank" rel="noopener">웹지도 ↗</a>
+    </div>`;
+  }
+  function parkingBlock(f, ap, side, term, isKr) {
+    const t = term.v;
+    const mine = ap.parking.filter(p => !p.term || !t || p.term === t);
+    const others = ap.parking.filter(p => p.term && t && p.term !== t);
+    const row = p => `
+      <div class="park-item"><span class="p">P</span><div><b>${esc(p.name)}</b>${p.res ? '<span class="ptag">예약 전용</span>' : ''}<div>${esc(p.desc)}</div>
+        ${isKr ? navButtons(p.q) : `<div class="lk"><a href="${mapUrl(p.q)}" target="_blank" rel="noopener">지도 ↗</a></div>`}</div></div>`;
+    // 제1터미널 카운터 위치로 가까운 장기주차장 안내 (공식 안내가 아닌 이용자 정리 기준)
+    let near = '';
+    const m = String(f.counter || '').trim().match(/^([A-Z])/i);
+    if (ap.code === 'ICN' && t === 'T1' && side === 'dep' && m) {
+      const c = m[1].toUpperCase();
+      if (c >= 'A' && c <= 'G') near = `${c}열은 동편 카운터라 P1·P3에서 가깝다고 알려져 있어요.`;
+      else if (c >= 'H' && c <= 'N') near = `${c}열은 서편 카운터라 P2·P4에서 가깝다고 알려져 있어요.`;
+    }
+    return `<div><h4>주차장${t && others.length ? ` · ${esc(t)}` : ''}</h4>
+      ${near ? `<div class="near-tip">${esc(near)} <span>(이용자 정리 기준, 공식 안내 아님)</span></div>` : ''}
+      <div class="park">${mine.map(row).join('')}</div>
+      ${others.length ? `<details class="park-other"><summary>다른 터미널 주차장 (${others.length})</summary><div class="park">${others.map(row).join('')}</div></details>` : ''}
+      ${ap.parkingRes ? `<div class="res-box"><b>예약주차장</b> ${esc(ap.parkingRes)}</div>` : ''}
+      ${ap.parkingLinks ? `<div class="links" style="margin-top:6px">${ap.parkingLinks.map(([l, u]) => `<a href="${u}" target="_blank" rel="noopener">${esc(l)} ↗</a>`).join('')}</div>` : ''}
+      ${isKr ? '<div class="note-small" style="margin-top:6px">카카오맵·티맵·네이버는 아이폰에 앱이 있어야 열려요. 티맵은 주차장 이름을 복사해 두니, 바로 검색되지 않으면 검색창에 붙여넣으세요. 카카오내비는 카카오맵에서 길찾기 → 내비로 넘어가면 돼요.</div>' : ''}
+      ${ap.parkingNote ? `<div class="note-small" style="margin-top:6px">${esc(ap.parkingNote)}</div>` : ''}
+    </div>`;
+  }
+
   // 터미널·발권 카운터·게이트·지연을 바로 확인하는 링크 (편명으로 검색)
   function liveLinks(f, fno, ap) {
     if (!fno) return '';
@@ -589,11 +626,7 @@
         ${term.est ? `<div class="note-small">터미널은 항공사 기준 추정값이에요. 항공권·항공사 안내로 확인하세요.</div>` : ''}
         ${hasMore ? `<details class="ap-more" ${first ? 'open' : ''}><summary>${first ? '공항 안내' : '공항 안내 (위와 같음)'}${showPark ? ' · 주차장' : ''}</summary><div class="ap-more-body">` : ''}
         ${ap.notes && ap.notes.length ? `<div><h4>알아두면 좋은 점</h4><ul>${ap.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul></div>` : ''}
-        ${showPark ? `
-          <div><h4>주차장</h4><div class="park">${ap.parking.map(p => `
-            <div class="park-item"><span class="p">P</span><div><b>${esc(p.name)}</b>${esc(p.desc)}
-              <div class="lk"><a href="${naverUrl(p.q)}" target="_blank" rel="noopener">네이버지도 ↗</a><a href="${mapUrl(p.q)}" target="_blank" rel="noopener">구글지도 ↗</a></div></div></div>`).join('')}
-          </div>${ap.parkingNote ? `<div class="note-small" style="margin-top:6px">${esc(ap.parkingNote)}</div>` : ''}</div>` : ''}
+        ${showPark ? parkingBlock(f, ap, side, term, isKr) : ''}
         ${hasMore ? '</div></details>' : ''}
         <div class="links">
           <a href="${mapUrl(ap.en)}" target="_blank" rel="noopener">공항 지도 ↗</a>
@@ -1296,7 +1329,7 @@
         h += `<h2>공항 정보</h2>` + aps.map(a => `<div class="r-ap r-block"><b>${esc(a.code)} · ${esc(a.ko)}</b> <span style="color:#5B6472">${esc(a.en)} · ${esc(tzLabel(a, t.startDate))}</span>
           ${a.terminals && a.terminals.length ? `<div>터미널: ${esc(a.terminals.join(', '))}</div>` : ''}
           ${(a.notes || []).length ? `<ul>${a.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
-          ${(a.parking || []).length ? `<div style="margin-top:4px"><b style="font-size:12px">주차장</b><ul>${a.parking.map(p => `<li><b>${esc(p.name)}</b> — ${esc(p.desc)}</li>`).join('')}</ul>${a.parkingNote ? `<div style="color:#5B6472">${esc(a.parkingNote)}</div>` : ''}</div>` : ''}
+          ${(a.parking || []).length ? `<div style="margin-top:4px"><b style="font-size:12px">주차장</b><ul>${a.parking.map(p => `<li><b>${esc(p.name)}</b>${p.res ? ' (예약 전용)' : ''} — ${esc(p.desc)}</li>`).join('')}</ul>${a.parkingRes ? `<div style="color:#5B6472">${esc(a.parkingRes)}</div>` : ''}${a.parkingNote ? `<div style="color:#5B6472">${esc(a.parkingNote)}</div>` : ''}</div>` : ''}
         </div>`).join('');
       }
     }
@@ -1343,6 +1376,12 @@
 
   // ───────── 이벤트 ─────────
   app.addEventListener('click', e => {
+    const cp = e.target.closest('[data-copy]');
+    if (cp) {
+      const text = cp.dataset.copy;
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => toast('주차장 이름을 복사했어요'), () => {});
+      return; // 링크는 그대로 열려요
+    }
     if (e.target.closest('[data-stop]')) return;
     const el = e.target.closest('[data-act]'); if (!el) return;
     const act = el.dataset.act, id = el.dataset.id, t = curTrip();
