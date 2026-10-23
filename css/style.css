@@ -415,7 +415,12 @@ body::before {
 .check-item .due { font-size: 11px; font-family: var(--font-mono); color: var(--muted); }
 .check-item .due.over { color: var(--warn); font-weight: 600; }
 .check-item .memo { font-size: 12px; color: var(--muted); }
-.check-item .del { margin-right: 6px; }
+.check-acts { display: flex; align-items: center; gap: 2px; margin-right: 6px; }
+.add-cost { min-height: 30px; padding: 0 6px; font-size: 12px; color: var(--muted); }
+.add-cost svg { width: 13px; height: 13px; }
+.check-cost { font-size: 13px; font-weight: 500; color: var(--accent); }
+.check-cost small { color: var(--muted); font-weight: 400; }
+.src-tag { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 700; background: var(--accent-soft); color: var(--accent); cursor: pointer; }
 .add-check { display: grid; grid-template-columns: 1fr auto auto auto; gap: 6px; margin-top: 14px; }
 .add-check input, .add-check select { min-width: 0; }
 
