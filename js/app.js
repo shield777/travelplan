@@ -536,8 +536,7 @@
     const fs = sortFlights(t.flights || []);
     const seen = new Set();
     return `
-      <div class="section-title"><h2>항공편</h2>${ro() ? '' : `<button class="btn sm" data-act="add-exp-sec" data-cat="flight">${ICON.plus}비용</button><button class="btn primary sm" data-act="add-flight">${ICON.plus}항공편 추가</button>`}</div>
-      ${sectionCost(t, 'flight', fs, '항공')}
+      <div class="section-title"><h2>항공편${sectionTotal(t, 'flight', fs)}</h2>${ro() ? '' : `<button class="btn primary sm" data-act="add-flight">${ICON.plus}항공편 추가</button>`}</div>
       <div class="info-note">편명과 출발·도착 공항 코드를 넣으면 공항 이름, 터미널(추정), 시차, 비행시간, 주차장, 지도 링크가 자동으로 나와요. 발권 카운터와 게이트는 출발 당일 정해지므로 카드의 <b>실시간 확인</b> 버튼으로 찾아 넣으세요.</div>
       ${fs.length ? fs.map(f => flightCard(t, f, seen)).join('') : `<div class="empty">등록된 항공편이 없어요.</div>`}`;
   }
@@ -571,7 +570,7 @@
           ${airportPanel(f, aa, 'arr', at, seen)}
         </div>
         ${f.memo ? `<div class="ap" style="border-top:1px solid var(--line)"><div class="note-small">${esc(f.memo)}</div></div>` : ''}
-        ${costBox(t, f.id, 'add-exp-flight', '항공권 금액을 넣으면 경비에 함께 합산돼요')}
+        ${costBox(t, f.id)}
         ${ro() ? '' : `<div class="flight-actions"><button class="btn sm" data-act="edit-flight" data-id="${f.id}">${ICON.edit}수정</button></div>`}
       </article>`;
   }
@@ -669,29 +668,20 @@
   }
 
   // 항공편·숙소에 연결된 비용
-  // 항공·숙박 탭 위쪽 합계: 그 분류의 비용 + 항공편·숙소에 연결된 비용
-  function sectionCost(t, cat, refs, label) {
+  // 항공·숙박 탭 제목 옆 합계: 그 분류의 비용 + 항공편·숙소에 연결된 비용
+  function sectionTotal(t, cat, refs) {
     const ids = new Set(refs.map(r => r.id));
     const all = (t.expenses || []).filter(e => e.cat === cat || ids.has(e.itemId));
-    if (!all.length) return ro() ? '' : `<div class="sec-cost empty-cost">${label} 비용을 넣으면 여기와 경비 탭에 함께 합산돼요.</div>`;
-    const krw = all.reduce((a, e) => a + (krwOf(t, e) || 0), 0);
-    const loose = all.filter(e => !ids.has(e.itemId)); // 특정 항공편·숙소에 연결 안 된 비용
-    return `<div class="sec-cost">
-      <div class="sec-total"><span>${label} 비용 합계</span><b class="num">${fmtNum(krw)}원</b><small>${all.length}건 · 경비 탭에 반영됨</small></div>
-      ${loose.length ? `<ul class="cost-list">${loose.map(e => `<li ${ro() ? '' : `data-act="edit-exp" data-id="${e.id}" role="button" tabindex="0"`}><span>${esc(e.title || EXP_LABEL[e.cat])}</span><span class="num">${esc(fmtMoney(e.amount, e.currency))}${e.currency !== 'KRW' && krwOf(t, e) != null ? ` <small>${fmtNum(krwOf(t, e))}원</small>` : ''}</span></li>`).join('')}</ul>` : ''}
-    </div>`;
+    if (!all.length) return '';
+    return `<span class="h2-cost num">${fmtNum(all.reduce((a, e) => a + (krwOf(t, e) || 0), 0))}원</span>`;
   }
 
-  function costBox(t, refId, addAct, emptyText) {
+  function costBox(t, refId) {
     const list = (t.expenses || []).filter(e => e.itemId === refId);
+    if (!list.length) return '';
     const krw = list.reduce((a, e) => a + (krwOf(t, e) || 0), 0);
-    const missing = list.some(e => krwOf(t, e) == null);
-    if (!list.length && ro()) return '';
-    return `<div class="cost-box">
-      <div class="cost-head"><span>비용</span>${list.length ? `<b class="num">${fmtNum(krw)}원</b>${missing ? '<small class="miss">일부 환율 없음</small>' : ''}` : `<small>${esc(emptyText)}</small>`}
-        ${ro() ? '' : `<button class="btn sm" data-act="${addAct}" data-id="${refId}">${ICON.plus}비용</button>`}</div>
-      ${list.length ? `<ul class="cost-list">${list.map(e => `<li ${ro() ? '' : `data-act="edit-exp" data-id="${e.id}" role="button" tabindex="0"`}><span>${esc(e.title || EXP_LABEL[e.cat])}</span><span class="num">${esc(fmtMoney(e.amount, e.currency))}${e.currency !== 'KRW' && krwOf(t, e) != null ? ` <small>${fmtNum(krwOf(t, e))}원</small>` : ''}</span></li>`).join('')}</ul>` : ''}
-    </div>`;
+    const foreign = list.filter(e => e.currency !== 'KRW').map(e => fmtMoney(e.amount, e.currency)).join(' + ');
+    return `<div class="cost-line"><span>비용</span><b class="num">${fmtNum(krw)}원</b>${foreign ? `<small>(${esc(foreign)})</small>` : ''}${list.some(e => krwOf(t, e) == null) ? '<small class="miss">환율 없음</small>' : ''}</div>`;
   }
   // 비용이 어느 탭에서 들어왔는지: { kind: 일정·항공·숙박·준비, tab, title }
   const linkInfo = (t, id) => {
@@ -710,8 +700,7 @@
   function stayTab(t) {
     const list = [...(t.stays || [])].sort((a, b) => (a.checkIn || '').localeCompare(b.checkIn || ''));
     return `
-      <div class="section-title"><h2>숙소</h2>${ro() ? '' : `<button class="btn sm" data-act="add-exp-sec" data-cat="stay">${ICON.plus}비용</button><button class="btn primary sm" data-act="add-stay">${ICON.plus}숙소 추가</button>`}</div>
-      ${sectionCost(t, 'stay', list, '숙박')}
+      <div class="section-title"><h2>숙소${sectionTotal(t, 'stay', list)}</h2>${ro() ? '' : `<button class="btn primary sm" data-act="add-stay">${ICON.plus}숙소 추가</button>`}</div>
       ${list.length ? '' : `<div class="empty">등록된 숙소가 없어요.${ro() ? '' : '<br>숙소를 추가하면 체크인·체크아웃이 일정에 자동으로 들어가요.'}</div>`}
       ${list.map(s => stayCard(t, s)).join('')}`;
   }
@@ -741,7 +730,7 @@
           ${s.phone ? `<div><dt>전화</dt><dd class="num">${esc(s.phone)}</dd></div>` : ''}
           ${s.memo ? `<div class="wide"><dt>메모</dt><dd>${esc(s.memo)}</dd></div>` : ''}
         </dl>` : ''}
-        ${costBox(t, s.id, 'add-exp-stay', '숙박비를 넣으면 경비에 함께 합산돼요')}
+        ${costBox(t, s.id)}
         ${ro() ? '' : `<div class="flight-actions"><button class="btn sm" data-act="edit-stay" data-id="${s.id}">${ICON.edit}수정</button></div>`}
       </article>`;
   }
@@ -976,10 +965,48 @@
 
   // 경비
   const expPreset = item => ({ date: item.date, itemId: item.id, title: item.title, cat: TYPE_TO_EXP[item.type] || 'etc' });
-  // 항공권·숙박비는 보통 여행 전에 결제해서 날짜를 '여행 전'으로 둬요
-  const flightPreset = (t, f) => ({ date: '', itemId: f.id, title: linkTitle(t, f.id), cat: 'flight', currency: 'KRW' });
-  const stayPreset = s => ({ date: '', itemId: s.id, title: s.name, cat: 'stay' });
   const checkPreset = c => ({ date: '', itemId: c.id, title: shortText(c.text), cat: 'prep', currency: 'KRW' });
+
+  // 항공편·숙소 입력창 안의 비용 칸. 연결된 비용이 한 건이면 그 비용을 고치고, 여러 건이면 경비 탭에서 고치도록 안내해요
+  function sheetCostHtml(t, refId, defCur, label, hint) {
+    const linked = refId ? (t.expenses || []).filter(e => e.itemId === refId) : [];
+    if (linked.length > 1) {
+      const krw = linked.reduce((a, e) => a + (krwOf(t, e) || 0), 0);
+      return `<div class="field"><span>${label}</span><div class="note-small">비용이 ${linked.length}건 들어 있어요 (합계 ${fmtNum(krw)}원). 경비 탭에서 고치세요.</div></div>`;
+    }
+    const e = linked[0];
+    const cur = e ? e.currency : defCur;
+    const curOpts = Array.from(new Set([cur, defCur, 'KRW', ...Object.keys(CUR)]));
+    return `<div class="field"><span>${label} <span class="hint">(선택) ${hint}</span></span>
+      <div class="cost-pair"><input type="text" id="c-amt" inputmode="decimal" value="${e ? esc(e.amount) : ''}" placeholder="0" autocomplete="off" aria-label="${label} 금액">
+      <select id="c-cur" aria-label="통화">${curOpts.map(c => `<option value="${c}" ${c === cur ? 'selected' : ''}>${c} · ${CUR[c][0]}</option>`).join('')}</select></div>
+      <div class="krw-preview" id="c-prev"></div></div>`;
+  }
+  function wireSheetCost(t, root) {
+    const amt = $('#c-amt', root); if (!amt) return;
+    const upd = () => {
+      const a = parseAmount(amt.value), c = $('#c-cur', root).value;
+      $('#c-prev', root).innerHTML = !amt.value.trim() || !a ? '' : c === 'KRW' ? '' : rateOf(t, c) ? `≈ <b>${fmtNum(Math.round(a * rateOf(t, c)))}원</b> <span>(${esc(rateLabel(t, c))})</span>` : `${esc(curUnit(c))} 환율은 저장하면 자동으로 불러와 볼게요.`;
+    };
+    amt.addEventListener('input', upd); $('#c-cur', root).addEventListener('change', upd); upd();
+  }
+  // 저장 전에 금액 확인. 잘못 넣었으면 오류 문구를 돌려줘요
+  function checkSheetCost(root) {
+    const amt = $('#c-amt', root); if (!amt || !amt.value.trim()) return '';
+    return parseAmount(amt.value) ? '' : '비용은 숫자로 넣어 주세요.';
+  }
+  function applySheetCost(t, root, refId, meta) {
+    const amt = $('#c-amt', root); if (!amt) return;
+    t.expenses = t.expenses || [];
+    const ex = t.expenses.find(e => e.itemId === refId);
+    if (!amt.value.trim()) { if (ex) t.expenses = t.expenses.filter(x => x !== ex); return; }
+    const amount = parseAmount(amt.value), currency = $('#c-cur', root).value;
+    if (ex) {
+      if (ex.amount !== amount || ex.currency !== currency) ex.krw = null; // 금액이 바뀌면 예전 실결제액은 맞지 않아요
+      Object.assign(ex, { amount, currency });
+    } else t.expenses.push({ id: uid(), date: '', itemId: refId, title: meta.title, cat: meta.cat, amount, currency, krw: null, pay: 'card', memo: '' });
+    if (currency !== 'KRW' && !rateOf(t, currency)) setTimeout(() => updateRates(t, [currency], true), 0);
+  }
 
   // 숙소 입력
   function staySheet(t, s) {
@@ -1000,10 +1027,12 @@
         <label class="field"><span>예약번호</span><input type="text" id="s-conf" value="${esc(s.confirmNo)}" autocapitalize="characters"></label>
         <label class="field"><span>전화번호</span><input type="text" id="s-phone" value="${esc(s.phone)}" inputmode="tel"></label>
       </div>
+      ${sheetCostHtml(t, s.id, tripCurrency(t), '숙박비', '넣으면 경비 탭에 함께 들어가요')}
       <label class="field"><span>메모</span><input type="text" id="s-memo" value="${esc(s.memo)}" placeholder="예: 트리플룸, 조식 포함"></label>
       <div class="ap-preview" id="s-err" style="color:var(--warn)"></div>`,
       `${isNew ? '' : `<button type="button" class="btn danger left" id="s-del">${ICON.trash}삭제</button>`}<button type="button" class="btn" data-close="1">취소</button><button type="submit" class="btn primary">저장</button>`,
       (root, close) => {
+        wireSheetCost(t, root);
         $('#s-in', root).addEventListener('change', () => { const a = val(root, 's-in'), b = $('#s-out', root); if (a && (!b.value || b.value < a)) b.value = a; });
         $('#s-del', root)?.addEventListener('click', () => {
           t.stays = t.stays.filter(x => x.id !== s.id);
@@ -1016,8 +1045,11 @@
           if (!name) { $('#s-err', root).textContent = '숙소 이름을 넣어 주세요.'; return; }
           const data = { name, address: val(root, 's-addr'), checkIn: val(root, 's-in'), checkInTime: val(root, 's-int'), checkOut: val(root, 's-out'), checkOutTime: val(root, 's-outt'), confirmNo: val(root, 's-conf'), phone: val(root, 's-phone'), memo: val(root, 's-memo') };
           if (data.checkIn && data.checkOut && data.checkOut < data.checkIn) { $('#s-err', root).textContent = '체크아웃 날짜가 체크인보다 빨라요.'; return; }
+          const costErr = checkSheetCost(root); if (costErr) { $('#s-err', root).textContent = costErr; return; }
           t.stays = t.stays || [];
-          if (isNew) t.stays.push({ id: uid(), ...data }); else Object.assign(s, data);
+          const sid = isNew ? uid() : s.id;
+          if (isNew) t.stays.push({ id: sid, ...data }); else Object.assign(s, data);
+          applySheetCost(t, root, sid, { cat: 'stay', title: data.name });
           save(); close(); render(); toast('저장했어요');
         });
       });
@@ -1156,7 +1188,9 @@
         <label class="field"><span>좌석</span><input type="text" id="f-seat" value="${esc(f.seat)}" placeholder="32A"></label>
         <label class="field"><span>예약번호</span><input type="text" id="f-pnr" value="${esc(f.pnr)}" autocapitalize="characters"></label>
       </div>
+      ${sheetCostHtml(t, f.id, 'KRW', '항공권 비용', '왕복 항공권이면 가는 편에만 넣으세요')}
       <label class="field"><span>메모</span><textarea id="f-memo">${esc(f.memo)}</textarea></label>
+      <div class="ap-preview" id="f-err" style="color:var(--warn)"></div>
       <div class="note-small">터미널을 비워 두면 항공사 기준으로 추정해서 보여 줘요. 시간은 각 공항의 현지 시간으로 입력하세요.</div>`,
       `${isNew ? '' : `<button type="button" class="btn danger left" id="f-del">${ICON.trash}삭제</button>`}<button type="button" class="btn" data-close="1">취소</button><button type="submit" class="btn primary">저장</button>`,
       (root, close) => {
@@ -1173,6 +1207,7 @@
           $('#f-aterm', root).placeholder = suggestTerminal(tmp, 'arr') ? suggestTerminal(tmp, 'arr') + ' (추정)' : '';
         };
         root.addEventListener('input', upd); upd();
+        wireSheetCost(t, root);
         $('#f-del', root)?.addEventListener('click', () => {
           t.flights = t.flights.filter(x => x.id !== f.id);
           (t.expenses || []).forEach(e => { if (e.itemId === f.id) e.itemId = ''; });
@@ -1188,7 +1223,10 @@
             seat: val(root, 'f-seat').toUpperCase(), pnr: val(root, 'f-pnr').toUpperCase(), memo: val(root, 'f-memo')
           };
           if (!data.arrDate) data.arrDate = data.depDate;
-          if (isNew) t.flights.push({ id: uid(), ...data }); else Object.assign(f, data);
+          const costErr = checkSheetCost(root); if (costErr) { $('#f-err', root).textContent = costErr; return; }
+          const fid = isNew ? uid() : f.id;
+          if (isNew) t.flights.push({ id: fid, ...data }); else Object.assign(f, data);
+          applySheetCost(t, root, fid, { cat: 'flight', title: `${data.flightNo || '항공'} ${data.dep || ''}→${data.arr || ''}` });
           save(); close(); render(); toast('저장했어요');
         });
       });
@@ -1571,21 +1609,12 @@
     if (e.target.closest('[data-stop]')) return;
     const el = e.target.closest('[data-act]'); if (!el) return;
     const act = el.dataset.act, id = el.dataset.id, t = curTrip();
-    if (ro() && ['add-exp-sec', 'add-exp-check', 'add-stay', 'edit-stay', 'add-exp-flight', 'add-exp-stay', 'edit-trip', 'add-item', 'edit-item', 'day-title', 'add-flight', 'edit-flight', 'edit-check', 'del-check', 'load-template', 'share', 'add-exp', 'add-exp-item', 'edit-exp', 'edit-rate', 'fetch-rates'].includes(act)) return;
+    if (ro() && ['add-exp-check', 'add-stay', 'edit-stay', 'edit-trip', 'add-item', 'edit-item', 'day-title', 'add-flight', 'edit-flight', 'edit-check', 'del-check', 'load-template', 'share', 'add-exp', 'add-exp-item', 'edit-exp', 'edit-rate', 'fetch-rates'].includes(act)) return;
     switch (act) {
       case 'add-exp': expSheet(t, null); break;
       case 'add-stay': staySheet(t, null); break;
-      case 'add-exp-sec': {
-        // 항공편·숙소가 하나뿐이면 거기에 바로 연결해요
-        const cat = el.dataset.cat, refs = cat === 'flight' ? (t.flights || []) : (t.stays || []);
-        const one = refs.length === 1 ? refs[0] : null;
-        expSheet(t, null, { date: '', cat, itemId: one ? one.id : '', title: one ? linkTitle(t, one.id) : '', currency: cat === 'flight' ? 'KRW' : undefined });
-        break;
-      }
       case 'add-exp-check': { const c = t.checklist.find(x => x.id === id); if (c) expSheet(t, null, checkPreset(c)); break; }
       case 'edit-stay': staySheet(t, (t.stays || []).find(x => x.id === id)); break;
-      case 'add-exp-flight': { const f = t.flights.find(x => x.id === id); if (f) expSheet(t, null, flightPreset(t, f)); break; }
-      case 'add-exp-stay': { const st = (t.stays || []).find(x => x.id === id); if (st) expSheet(t, null, stayPreset(st)); break; }
       case 'goto-stay': ui.tab = 'stay'; render(); setTimeout(() => $('#st-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30); break;
       case 'add-exp-item': { const it = t.items.find(x => x.id === id); if (it) expSheet(t, null, expPreset(it)); break; }
       case 'edit-exp': expSheet(t, (t.expenses || []).find(x => x.id === id)); break;

@@ -334,23 +334,14 @@ body::before {
 .stay-info { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; margin: 0; padding: 10px 16px; border-top: 1px solid var(--line); }
 .stay-info .wide { grid-column: 1 / -1; }
 .stay-info dd { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
-.cost-box { border-top: 1px solid var(--line); padding: 10px 16px; display: grid; gap: 6px; }
-.cost-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.cost-head > span { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .06em; }
-.cost-head b { font-size: 16px; font-weight: 500; }
-.cost-head small { font-size: 12px; color: var(--muted); flex: 1; min-width: 0; }
-.cost-head small.miss { color: var(--warn); flex: none; }
-.cost-head .btn { margin-left: auto; }
-.cost-list { list-style: none; margin: 0; padding: 0; }
-.cost-list li { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 4px 0; border-top: 1px dashed var(--line); cursor: pointer; }
-.cost-list li small { color: var(--muted); margin-left: 4px; }
 
-.sec-cost { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 14px; margin-bottom: 14px; display: grid; gap: 4px; }
-.sec-cost.empty-cost { font-size: 13px; color: var(--muted); border-style: dashed; }
-.sec-total { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
-.sec-total span { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .04em; }
-.sec-total b { font-family: var(--font-display); font-size: 26px; font-weight: 700; line-height: 1; }
-.sec-total small { font-size: 12px; color: var(--muted); }
+.h2-cost { margin-left: 8px; font-family: var(--font-display); font-size: 20px; font-weight: 700; color: var(--accent); }
+.cost-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cost-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; padding: 10px 16px; border-top: 1px solid var(--line); }
+.cost-line span { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .06em; }
+.cost-line b { font-size: 16px; font-weight: 500; }
+.cost-line small { font-size: 12px; color: var(--muted); }
+.cost-line small.miss { color: var(--warn); }
 
 /* ───── 경비 ───── */
 .day-spent { text-align: right; display: grid; font-size: 11px; color: var(--muted); line-height: 1.2; }
