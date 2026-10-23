@@ -74,7 +74,13 @@
   const mapUrl = q => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
   const naverUrl = q => `https://map.naver.com/p/search/${encodeURIComponent(q)}`;
   // 일정 장소는 국내 여행이면 네이버지도, 해외 여행이면 구글맵으로 열어요
-  const placeMap = (t, q) => isDomestic(t) ? { url: naverUrl(q), label: '네이버지도' } : { url: mapUrl(q), label: '구글맵' };
+  // app: 아이폰 지도 앱을 바로 여는 주소, web: 앱이 없을 때 쓰는 웹 지도
+  const placeMap = (t, q) => {
+    const e = encodeURIComponent(q);
+    return isDomestic(t)
+      ? { app: `nmap://search?query=${e}&appname=${encodeURIComponent(NAV_APPNAME)}`, web: naverUrl(q), label: '네이버지도' }
+      : { app: `comgooglemaps://?q=${e}`, web: mapUrl(q), label: '구글맵' };
+  };
 
   // ── 돈 계산
   const fmtNum = (n, d = 0) => Number(n).toLocaleString('ko-KR', { maximumFractionDigits: d, minimumFractionDigits: 0 });
@@ -474,7 +480,7 @@
         <div class="tl-card" ${ro() ? '' : `data-act="edit-item" data-id="${i.id}" role="button" tabindex="0"`}>
           <div class="tl-type">${ICON[i.type] || ICON.etc}${TYPE_LABEL[i.type] || '기타'}</div>
           <div class="tl-title">${esc(i.title)}</div>
-          ${map ? `<div class="tl-place"><a href="${map.url}" target="_blank" rel="noopener" data-stop="1">${esc(i.place)} ↗</a><span class="map-tag">${map.label}</span></div>` : ''}
+          ${map ? `<div class="tl-place"><a href="${esc(map.app)}" data-stop="1">${esc(i.place)} ↗</a><span class="map-tag">${map.label} 앱</span><a class="map-web" href="${esc(map.web)}" target="_blank" rel="noopener" data-stop="1">웹</a></div>` : ''}
           ${i.memo ? `<div class="tl-memo">${esc(i.memo)}</div>` : ''}
           ${i.cost ? `<div class="tl-cost">${esc(i.cost)}</div>` : ''}
           ${sp ? `<div class="tl-spent num">${fmtNum(sp.krw)}원${foreign ? ` <small>(${esc(foreign)})</small>` : ''}</div>` : ''}
@@ -831,7 +837,7 @@
         <label class="field"><span>시작</span><input type="time" id="f-time" value="${esc(item.time)}"></label>
         <label class="field"><span>끝 <span class="hint">(선택)</span></span><input type="time" id="f-end" value="${esc(item.endTime)}"></label>
       </div>
-      <label class="field"><span>장소 · 주소 <span class="hint">${isDomestic(t) ? '국내 여행이라 네이버지도로 연결돼요' : '해외 여행이라 구글맵으로 연결돼요'}</span></span><input type="text" id="f-place" value="${esc(item.place)}" placeholder="${isDomestic(t) ? '예: 제주 애월읍 애월해안로 272' : '예: Kiyomizu-dera 또는 현지 주소'}"></label>
+      <label class="field"><span>장소 · 주소 <span class="hint">${isDomestic(t) ? '국내 여행이라 네이버지도 앱으로 열려요' : '해외 여행이라 구글맵 앱으로 열려요'}</span></span><input type="text" id="f-place" value="${esc(item.place)}" placeholder="${isDomestic(t) ? '예: 제주 애월읍 애월해안로 272' : '예: Kiyomizu-dera 또는 현지 주소'}"></label>
       <label class="field"><span>메모</span><textarea id="f-memo">${esc(item.memo)}</textarea></label>
       ${item.cost ? `<label class="field"><span>비용 메모 <span class="hint">(이전 방식 · 합계에는 안 들어가요)</span></span><input type="text" id="f-cost" value="${esc(item.cost)}"></label>` : ''}
       ${isNew ? '<div class="note-small">저장한 뒤 일정 카드의 <b>+경비</b>로 쓴 돈을 넣을 수 있어요.</div>' : `<div class="field"><span>이 일정의 경비</span>
