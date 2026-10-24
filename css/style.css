@@ -348,13 +348,34 @@ body::before {
 .cost-line small { font-size: 12px; color: var(--muted); }
 .cost-line small.miss { color: var(--warn); }
 
+.fl-lookup { display: grid; gap: 8px; margin-top: -4px; }
+.fl-lookup:empty { display: none; }
+.memo-hit { font-size: 13px; padding: 8px 10px; border-radius: var(--r-sm); background: var(--accent-soft); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.memo-hit b { font-family: var(--font-mono); font-weight: 500; }
+.memo-hit span { color: var(--muted); }
+.look-links { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+
+.fl-memo { padding: 10px 16px; font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; }
+.fl-more { border-top: 1px solid var(--line); }
+.fl-more > summary { cursor: pointer; padding: 10px 16px; font-size: 13px; font-weight: 600; color: var(--accent); }
+.ap-sugg { display: flex; flex-wrap: wrap; gap: 6px; }
+.ap-sugg:empty { display: none; }
+.ap-pick { min-height: 32px; font-size: 13px; }
+.ap-pick small { color: var(--muted); font-weight: 400; margin-left: 2px; }
+.ap-ok { font-size: 12px; color: var(--ok); font-weight: 600; }
+.ap-none { font-size: 12px; color: var(--muted); }
+
 /* ───── 경비 ───── */
 .day-spent { text-align: right; display: grid; font-size: 11px; color: var(--muted); line-height: 1.2; }
 .day-spent b { font-size: 14px; color: var(--ink); font-weight: 500; }
 .tl-card { position: relative; }
 .tl-spent { font-size: 13px; font-weight: 500; color: var(--accent); margin-top: 2px; }
 .tl-spent small { color: var(--muted); font-weight: 400; }
-.add-exp { position: absolute; top: 4px; right: 4px; min-height: 28px; padding: 0 8px; font-size: 12px; color: var(--muted); }
+.card-acts { position: absolute; top: 4px; right: 4px; display: flex; gap: 2px; }
+.add-exp { min-height: 28px; padding: 0 8px; font-size: 12px; color: var(--muted); }
+.del-item { min-height: 28px; min-width: 30px; padding: 0 7px; font-size: 12px; color: var(--muted); }
+.del-item svg { width: 14px; height: 14px; }
+.del-item.armed { background: var(--warn); border-color: var(--warn); color: var(--surface); }
 .add-exp svg { width: 14px; height: 14px; }
 .money-hero { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; display: grid; gap: 4px; margin-bottom: 14px; }
 .money-hero .lbl { font-size: 12px; color: var(--muted); letter-spacing: .06em; font-weight: 600; }
@@ -424,7 +445,7 @@ body::before {
 .check-cost { font-size: 13px; font-weight: 500; color: var(--accent); }
 .check-cost small { color: var(--muted); font-weight: 400; }
 .src-tag { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 700; background: var(--accent-soft); color: var(--accent); cursor: pointer; }
-.add-check { display: grid; grid-template-columns: 1fr auto auto auto; gap: 6px; margin-top: 14px; }
+.add-check { display: grid; grid-template-columns: 1fr 160px auto; gap: 6px; margin-top: 14px; }
 .add-check input, .add-check select { min-width: 0; }
 
 /* ───── 폼 / 시트 ───── */
@@ -475,8 +496,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 @media (max-width: 560px) {
   .airport-pair { grid-template-columns: 1fr; }
   .pass-route .code { font-size: 40px; }
-  .add-check { grid-template-columns: 1fr 1fr; }
-  .add-check input[type=text] { grid-column: 1 / -1; }
+  .add-check { grid-template-columns: 1fr auto; }
+  .add-check > input[type=text] { grid-column: 1 / -1; }
   .trip-head h1 { font-size: 24px; }
   .tabs button { font-size: 13px; }
 }

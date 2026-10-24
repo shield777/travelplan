@@ -264,6 +264,34 @@
   const airlineCode = no => { const m = String(no || '').toUpperCase().replace(/\s/g, '').match(/^([A-Z0-9]{2})(\d{1,4})/); return m ? m[1] : ''; };
   const airlineName = no => AIRLINES[airlineCode(no)] || '';
   const findAp = code => AP[String(code || '').toUpperCase()] || null;
+  // 공항 이름·도시·나라·코드로 찾기 (예: 인천, 간사이, 나트랑, 도쿄, incheon)
+  const apKey = v => String(v || '').toLowerCase().replace(/\s|국제공항|공항|airport|international/g, '');
+  function searchAirports(q) {
+    const k = apKey(q); if (!k) return [];
+    const scored = [];
+    AIRPORTS.forEach(a => {
+      const fields = [a.code.toLowerCase(), apKey(a.ko), apKey(a.en), apKey(a.city), apKey(a.country)];
+      let sc = 0;
+      if (fields[0] === k) sc = 100;
+      else if (fields[1] === k || fields[3] === k) sc = 90;
+      else if (fields[1].startsWith(k) || fields[3].startsWith(k)) sc = 70;
+      else if (fields[1].includes(k) || fields[2].includes(k) || fields[3].includes(k)) sc = 50;
+      else if (fields[4].startsWith(k)) sc = 20;
+      if (sc) scored.push([sc, a]);
+    });
+    return scored.sort((x, y) => y[0] - x[0]).map(x => x[1]);
+  }
+  // 입력 글자를 공항 코드로: 하나로 정해지면 코드, 여러 개면 null(골라야 함), 없으면 ''
+  function resolveAirport(q) {
+    const t = String(q || '').trim(); if (!t) return '';
+    const exact = AIRPORTS.find(a => a.ko === t || a.code === t.toUpperCase());
+    if (exact) return exact.code;
+    const list = searchAirports(t);
+    if (list.length === 1) return list[0].code;
+    if (list.length > 1) { const top = list.filter(a => apKey(a.city) === apKey(t) || apKey(a.ko) === apKey(t)); return top.length === 1 ? top[0].code : null; }
+    return '';
+  }
+  const apLabel = (code, name) => { const a = findAp(code); return a ? a.ko : (name || code || ''); };
 
   function suggestTerminal(f, side) {
     const code = side === 'dep' ? f.dep : f.arr;
@@ -495,7 +523,7 @@
           ${i.memo ? `<div class="tl-memo">${esc(i.memo)}</div>` : ''}
           ${i.cost ? `<div class="tl-cost">${esc(i.cost)}</div>` : ''}
           ${sp ? `<div class="tl-spent num">${fmtNum(sp.krw)}원${foreign ? ` <small>(${esc(foreign)})</small>` : ''}</div>` : ''}
-          ${ro() ? '' : `<button class="btn sm ghost add-exp" data-act="add-exp-item" data-id="${i.id}" aria-label="${esc(i.title)} 경비 추가">${ICON.plus}경비</button>`}
+          ${ro() ? '' : `<div class="card-acts"><button class="btn sm ghost add-exp" data-act="add-exp-item" data-id="${i.id}" aria-label="${esc(i.title)} 경비 추가">${ICON.plus}경비</button><button class="btn sm ghost del-item" data-act="del-item" data-id="${i.id}" aria-label="${esc(i.title)} 삭제">${ICON.trash}</button></div>`}
         </div>
       </li>`;
   }
@@ -538,7 +566,6 @@
     const seen = new Set();
     return `
       <div class="section-title"><h2>항공편${sectionTotal(t, 'flight', fs)}</h2>${ro() ? '' : `<button class="btn primary sm" data-act="add-flight">${ICON.plus}항공편 추가</button>`}</div>
-      <div class="info-note">편명과 출발·도착 공항 코드를 넣으면 공항 이름, 터미널(추정), 시차, 비행시간, 주차장, 지도 링크가 자동으로 나와요. 발권 카운터와 게이트는 출발 당일 정해지므로 카드의 <b>실시간 확인</b> 버튼으로 찾아 넣으세요.</div>
       ${fs.length ? fs.map(f => flightCard(t, f, seen)).join('') : `<div class="empty">등록된 항공편이 없어요.</div>`}`;
   }
 
@@ -565,13 +592,16 @@
           <div><dt>좌석</dt><dd>${esc(f.seat || '-')}</dd></div>
           <div><dt>예약번호</dt><dd>${esc(f.pnr || '-')}</dd></div>
         </dl>
-        ${liveLinks(f, fno, da)}
-        <div class="airport-pair">
-          ${airportPanel(f, da, 'dep', dt, seen)}
-          ${airportPanel(f, aa, 'arr', at, seen)}
-        </div>
-        ${f.memo ? `<div class="ap" style="border-top:1px solid var(--line)"><div class="note-small">${esc(f.memo)}</div></div>` : ''}
+        ${f.memo ? `<div class="fl-memo">${esc(f.memo)}</div>` : ''}
         ${costBox(t, f.id)}
+        <details class="fl-more">
+          <summary>공항 정보 · 주차장 · 실시간 확인</summary>
+          ${liveLinks(f, fno, da)}
+          <div class="airport-pair">
+            ${airportPanel(f, da, 'dep', dt, seen)}
+            ${airportPanel(f, aa, 'arr', at, seen)}
+          </div>
+        </details>
         ${ro() ? '' : `<div class="flight-actions"><button class="btn sm" data-act="edit-flight" data-id="${f.id}">${ICON.edit}수정</button></div>`}
       </article>`;
   }
@@ -809,19 +839,18 @@
         ${over ? `<div class="note-small" style="color:var(--warn);font-weight:600">기한이 지난 항목이 ${over}개 있어요.</div>` : ''}
         ${prepCost ? `<div class="note-small">준비 비용 <b class="num" style="color:var(--ink)">${fmtNum(prepCost)}원</b> · 경비 탭 합계에 들어가 있어요</div>` : ''}
       </div>
-      ${list.length === 0 ? (ro() ? `<div class="empty">함께 보낸 준비 항목이 없어요.</div>` : `<div class="empty">준비 항목이 없어요.<br><button class="btn sm" data-act="load-template" style="margin-top:10px">기본 준비 리스트 불러오기</button></div>`) : ''}
+      ${list.length === 0 ? `<div class="empty">${ro() ? '함께 보낸 준비 항목이 없어요.' : '준비할 일을 아래에 추가하세요. 비용이 드는 일은 금액도 같이 넣으면 경비 탭에 들어가요.'}</div>` : ''}
       ${cats.map(c => {
         const items = list.filter(x => (x.cat || '기타') === c);
-        return `<section class="cat"><h3>${esc(c)} <span class="num">${items.filter(x => x.done).length}/${items.length}</span></h3>
+        return `<section class="cat"><h3>${esc(c === '기타' ? '할 일' : c)} <span class="num">${items.filter(x => x.done).length}/${items.length}</span></h3>
           <ul class="check-list">${items.map(x => checkRow(t, x, today)).join('')}</ul></section>`;
       }).join('')}
       ${ro() ? '' : `<form class="add-check" id="add-check-form">
-        <input type="text" id="new-check-text" placeholder="새 할 일 (예: 유모차 대여 예약)" aria-label="새 할 일" required>
-        <select id="new-check-cat" aria-label="분류">${CATS.map(c => `<option>${c}</option>`).join('')}</select>
-        <select id="new-check-due" aria-label="기한">${DUE_OPTS.map(([v, l]) => `<option value="${v ?? ''}">${l}</option>`).join('')}</select>
+        <input type="text" id="new-check-text" placeholder="새 할 일 (예: 여행자보험 가입)" aria-label="새 할 일" required>
+        <div class="won-input"><input type="text" id="new-check-cost" inputmode="numeric" placeholder="비용 (선택)" aria-label="비용" autocomplete="off"><span>원</span></div>
         <button class="btn primary" type="submit">${ICON.plus}추가</button>
       </form>
-      ${list.length ? `<div style="margin-top:10px;text-align:right"><button class="btn sm ghost" data-act="load-template">기본 항목 다시 추가</button></div>` : ''}`}`;
+`}`;
   }
   function dueDate(t, c) { return (c.due == null || c.due === '' || !t.startDate) ? null : addDays(t.startDate, -Number(c.due)); }
   function isOver(t, c, today) { const d = dueDate(t, c); return d ? today > d : false; }
@@ -893,7 +922,6 @@
         <label class="field"><span>현지 통화</span><select id="f-cur"><option value="">나라에 맞게 자동</option>${Object.keys(CUR).map(c => `<option value="${c}" ${t.currency === c ? 'selected' : ''}>${c} · ${CUR[c][0]}</option>`).join('')}</select></label>
       </div>
       <label class="field"><span>메모</span><textarea id="f-memo">${esc(t.memo)}</textarea></label>
-      ${isNew ? `<label class="check-inline"><input type="checkbox" id="f-tpl" checked> 기본 준비 리스트 넣기 (여권·보험·환전 등)</label>` : ''}
       <div class="ap-preview" id="f-name-preview"></div>
       <div class="ap-preview" id="f-err" style="color:var(--warn)"></div>`,
       `${isNew ? '' : `<button type="button" class="btn danger left" id="f-del">${ICON.trash}여행 삭제</button>`}<button type="button" class="btn" data-close="1">취소</button><button type="submit" class="btn primary">저장</button>`,
@@ -924,7 +952,7 @@
           if (en < s) { $('#f-err', root).textContent = '돌아오는 날이 출발일보다 빨라요.'; return; }
           const data = { year: Number(val(root, 'f-year')) || Number(s.slice(0, 4)), country, city, subtitle: val(root, 'f-sub'), startDate: s, endDate: en, memo: val(root, 'f-memo'), people: Number(val(root, 'f-people')) || '', currency: val(root, 'f-cur') };
           if (isNew) {
-            const nt = { id: uid(), ...data, dayTitles: {}, items: [], flights: [], stays: [], expenses: [], rates: {}, checklist: $('#f-tpl', root).checked ? templateChecklist(/한국|대한민국/.test(country)) : [] };
+            const nt = { id: uid(), ...data, dayTitles: {}, items: [], flights: [], stays: [], expenses: [], rates: {}, checklist: [] };
             state.trips.push(nt); ui.tripId = nt.id; ui.view = 'trip'; ui.tab = 'plan';
           } else {
             Object.assign(t, data);
@@ -1153,24 +1181,38 @@
       });
   }
 
+  // ── 편명 기억: 한 번 넣은 편명의 노선·시간을 이 기기에 기억해 두고 다음에 자동으로 채워요
+  const normNo = v => String(v || '').toUpperCase().replace(/\s/g, '');
+  function rememberFlight(f) {
+    const no = normNo(f.flightNo);
+    if (!no || !f.dep || !f.arr) return;
+    state.flightMemo = state.flightMemo || {};
+    state.flightMemo[no] = {
+      dep: f.dep, arr: f.arr, depName: f.depName || '', arrName: f.arrName || '', depTime: f.depTime || '', arrTime: f.arrTime || '',
+      dayOffset: f.depDate && f.arrDate ? Math.max(0, diffDays(f.depDate, f.arrDate)) : 0,
+      depTerminal: f.depTerminal || '', arrTerminal: f.arrTerminal || '', at: todayStr()
+    };
+  }
+  function seedFlightMemo() {
+    if (state.flightMemo) return;
+    state.flightMemo = {};
+    state.trips.filter(t => !t.example).forEach(t => sortFlights(t.flights || []).forEach(rememberFlight)); // 예시 여행 시간은 실제가 아니라서 빼요
+  }
+
   // 항공편
   function flightSheet(t, f) {
     const isNew = !f;
     f = f || { flightNo: '', dep: '', arr: '', depName: '', arrName: '', depDate: t.startDate || '', depTime: '', arrDate: '', arrTime: '', depTerminal: '', arrTerminal: '', gate: '', seat: '', pnr: '', memo: '' };
-    const apOpts = AIRPORTS.map(a => `<option value="${a.code}">${esc(a.ko)} · ${esc(a.city)}</option>`).join('');
     openSheet(isNew ? '항공편 추가' : '항공편 수정', `
       <div class="grid2">
-        <label class="field"><span>편명</span><input type="text" id="f-no" value="${esc(f.flightNo)}" placeholder="KE723" autocapitalize="characters" autocomplete="off"></label>
+        <label class="field"><span>편명</span><input type="text" id="f-no" list="dl-fno" value="${esc(f.flightNo)}" placeholder="KE723" autocapitalize="characters" autocomplete="off"></label>
         <div class="field"><span>항공사</span><div class="ap-preview" id="f-al" style="padding-top:10px"></div></div>
       </div>
+      <datalist id="dl-fno">${Object.entries(state.flightMemo || {}).map(([no, m]) => `<option value="${esc(no)}">${esc(m.dep)}→${esc(m.arr)} ${esc(m.depTime)}</option>`).join('')}</datalist>
+      <div class="fl-lookup" id="f-look"></div>
       <div class="grid2">
-        <label class="field"><span>출발 공항 코드</span><input type="text" id="f-dep" list="dl-ap" value="${esc(f.dep)}" placeholder="ICN" autocapitalize="characters" autocomplete="off" maxlength="3"><span class="ap-preview" id="p-dep"></span></label>
-        <label class="field"><span>도착 공항 코드</span><input type="text" id="f-arr" list="dl-ap" value="${esc(f.arr)}" placeholder="KIX" autocapitalize="characters" autocomplete="off" maxlength="3"><span class="ap-preview" id="p-arr"></span></label>
-      </div>
-      <datalist id="dl-ap">${apOpts}</datalist>
-      <div class="grid2" id="custom-names">
-        <label class="field" id="w-depName" hidden><span>출발 공항 이름 (목록에 없음)</span><input type="text" id="f-depName" value="${esc(f.depName || '')}"></label>
-        <label class="field" id="w-arrName" hidden><span>도착 공항 이름 (목록에 없음)</span><input type="text" id="f-arrName" value="${esc(f.arrName || '')}"></label>
+        <div class="field"><span>출발 공항</span><input type="text" id="f-dep" value="${esc(apLabel(f.dep, f.depName))}" placeholder="예: 인천" autocomplete="off" data-code="${esc(f.dep)}"><div class="ap-sugg" id="s-dep"></div></div>
+        <div class="field"><span>도착 공항</span><input type="text" id="f-arr" value="${esc(apLabel(f.arr, f.arrName))}" placeholder="예: 간사이, 나트랑" autocomplete="off" data-code="${esc(f.arr)}"><div class="ap-sugg" id="s-arr"></div></div>
       </div>
       <div class="grid2">
         <label class="field"><span>출발 날짜</span><input type="date" id="f-ddate" value="${esc(f.depDate)}"></label>
@@ -1198,19 +1240,59 @@
       <div class="note-small">터미널을 비워 두면 항공사 기준으로 추정해서 보여 줘요. 시간은 각 공항의 현지 시간으로 입력하세요.</div>`,
       `${isNew ? '' : `<button type="button" class="btn danger left" id="f-del">${ICON.trash}삭제</button>`}<button type="button" class="btn" data-close="1">취소</button><button type="submit" class="btn primary">저장</button>`,
       (root, close) => {
+        let filledFor = isNew ? '' : normNo(f.flightNo); // 수정할 때는 기존 값을 덮어쓰지 않아요
+        // 공항 칸: 글자를 넣으면 후보를 보여 주고, 고르면 코드를 기억해요
+        const setAp = (side, code, name) => { const inp = $('#f-' + side, root); inp.value = apLabel(code, name); inp.dataset.code = findAp(code) ? code : ''; };
+        const apCode = side => { const inp = $('#f-' + side, root); return inp.dataset.code || resolveAirport(inp.value); }; // null이면 후보가 여러 개
+        const showSugg = side => {
+          const inp = $('#f-' + side, root), box = $('#s-' + side, root);
+          const a = findAp(inp.dataset.code);
+          if (a && a.ko === inp.value.trim()) { box.innerHTML = `<span class="ap-ok">✓ ${esc(a.code)} · ${esc(a.city)}, ${esc(a.country)}</span>`; return; }
+          inp.dataset.code = '';
+          const q = inp.value.trim();
+          if (!q) { box.innerHTML = ''; return; }
+          const list = searchAirports(q).slice(0, 6);
+          box.innerHTML = list.length
+            ? list.map(x => `<button type="button" class="btn sm ap-pick" data-side="${side}" data-code="${x.code}">${esc(x.ko)} <small>${esc(x.code)} · ${esc(x.city)}</small></button>`).join('')
+            : `<span class="ap-none">목록에 없는 공항이에요. 이 이름 그대로 저장돼요.</span>`;
+        };
+        root.addEventListener('click', ev => {
+          const b = ev.target.closest('.ap-pick'); if (!b) return;
+          setAp(b.dataset.side, b.dataset.code); showSugg(b.dataset.side); $('#f-err', root).textContent = ''; upd();
+        });
+        const fillFromMemo = m => {
+          const set = (id, v) => { if (v) $('#' + id, root).value = v; };
+          setAp('dep', m.dep, m.depName); setAp('arr', m.arr, m.arrName);
+          set('f-dtime', m.depTime); set('f-atime', m.arrTime); set('f-dterm', m.depTerminal); set('f-aterm', m.arrTerminal);
+          const d = val(root, 'f-ddate');
+          if (d) $('#f-adate', root).value = addDays(d, m.dayOffset || 0);
+        };
+        const lookup = () => {
+          const no = normNo(val(root, 'f-no')), d = val(root, 'f-ddate');
+          const box = $('#f-look', root);
+          if (!no || no.length < 3) { box.innerHTML = ''; return; }
+          const m = (state.flightMemo || {})[no];
+          // 새 항공편이고 출발·도착이 비어 있으면 기억된 정보로 바로 채워요
+          if (m && filledFor !== no && !val(root, 'f-dep') && !val(root, 'f-arr')) { fillFromMemo(m); filledFor = no; showSugg('dep'); showSugg('arr'); }
+          const q = encodeURIComponent(`${no} ${d ? `${parseD(d).getMonth() + 1}월 ${parseD(d).getDate()}일` : ''} 항공편`.replace(/\s+/g, ' ').trim());
+          box.innerHTML = `
+            ${m ? `<div class="memo-hit">${filledFor === no ? '전에 넣은' : '기억된'} <b>${esc(no)}</b> 정보: ${esc(m.dep)}→${esc(m.arr)} ${esc(m.depTime)}${m.arrTime ? '–' + esc(m.arrTime) : ''}
+              ${filledFor === no ? '<span>로 채웠어요. 날짜와 시간이 맞는지 확인하세요.</span>' : `<button type="button" class="btn sm" id="f-fill">이 정보로 채우기</button>`}</div>` : ''}
+            <div class="look-links"><span>${m ? '노선이 바뀌었으면' : '노선을 모르면'}</span>
+              <a class="btn sm" href="https://www.google.com/search?q=${q}" target="_blank" rel="noopener">구글에서 찾기 ↗</a>
+              <a class="btn sm" href="https://search.naver.com/search.naver?query=${q}" target="_blank" rel="noopener">네이버에서 찾기 ↗</a></div>`;
+          $('#f-fill', root)?.addEventListener('click', () => { fillFromMemo(m); filledFor = no; upd(); });
+        };
         const upd = () => {
-          const no = val(root, 'f-no'), dep = val(root, 'f-dep').toUpperCase(), arr = val(root, 'f-arr').toUpperCase();
+          lookup();
+          const no = val(root, 'f-no'), dep = apCode('dep'), arr = apCode('arr');
           $('#f-al', root).innerHTML = airlineName(no) ? `<b>${esc(airlineName(no))}</b>` : (no ? '목록에 없는 항공사' : '');
           const tmp = { flightNo: no, dep, arr };
-          [['dep', dep], ['arr', arr]].forEach(([s, c]) => {
-            const a = findAp(c);
-            $('#p-' + s, root).innerHTML = a ? `<b>${esc(a.ko)}</b> · ${esc(a.city)}` : (c.length === 3 ? '목록에 없는 공항 · 아래에 이름을 적어 주세요' : '');
-            $('#w-' + s + 'Name', root).hidden = !(c.length === 3 && !a);
-          });
           $('#f-dterm', root).placeholder = suggestTerminal(tmp, 'dep') ? suggestTerminal(tmp, 'dep') + ' (추정)' : '';
           $('#f-aterm', root).placeholder = suggestTerminal(tmp, 'arr') ? suggestTerminal(tmp, 'arr') + ' (추정)' : '';
         };
-        root.addEventListener('input', upd); upd();
+        root.addEventListener('input', ev => { if (ev.target.id === 'f-dep' || ev.target.id === 'f-arr') { showSugg(ev.target.id.slice(2)); $('#f-err', root).textContent = ''; } upd(); });
+        showSugg('dep'); showSugg('arr'); upd();
         $('#f-del', root)?.addEventListener('click', () => {
           t.flights = t.flights.filter(x => x.id !== f.id);
           (t.expenses || []).forEach(e => { if (e.itemId === f.id) e.itemId = ''; });
@@ -1218,9 +1300,16 @@
         });
         $('#sheet-form', root).addEventListener('submit', e => {
           e.preventDefault();
+          // 공항: 목록에서 하나로 정해지면 코드, 후보가 여럿이면 고르게, 목록에 없으면 이름 그대로
+          const ap = {};
+          for (const side of ['dep', 'arr']) {
+            const text = val(root, 'f-' + side), code = apCode(side);
+            if (text && code === null) { $('#f-err', root).textContent = `${side === 'dep' ? '출발' : '도착'} 공항 후보가 여러 개예요. 아래 목록에서 하나를 골라 주세요.`; return; }
+            ap[side] = code ? { code, name: '' } : { code: /^[A-Za-z]{3}$/.test(text) ? text.toUpperCase() : '', name: /^[A-Za-z]{3}$/.test(text) ? '' : text };
+          }
           const data = {
-            flightNo: val(root, 'f-no').toUpperCase().replace(/\s/g, ''), dep: val(root, 'f-dep').toUpperCase(), arr: val(root, 'f-arr').toUpperCase(),
-            depName: val(root, 'f-depName'), arrName: val(root, 'f-arrName'),
+            flightNo: val(root, 'f-no').toUpperCase().replace(/\s/g, ''), dep: ap.dep.code, arr: ap.arr.code,
+            depName: ap.dep.name, arrName: ap.arr.name,
             depDate: val(root, 'f-ddate'), depTime: val(root, 'f-dtime'), arrDate: val(root, 'f-adate'), arrTime: val(root, 'f-atime'),
             depTerminal: val(root, 'f-dterm').toUpperCase(), arrTerminal: val(root, 'f-aterm').toUpperCase(), gate: val(root, 'f-gate').toUpperCase(), counter: val(root, 'f-counter').toUpperCase(),
             seat: val(root, 'f-seat').toUpperCase(), pnr: val(root, 'f-pnr').toUpperCase(), memo: val(root, 'f-memo')
@@ -1229,6 +1318,7 @@
           const costErr = checkSheetCost(root); if (costErr) { $('#f-err', root).textContent = costErr; return; }
           const fid = isNew ? uid() : f.id;
           if (isNew) t.flights.push({ id: fid, ...data }); else Object.assign(f, data);
+          if (!t.example) rememberFlight(data);
           applySheetCost(t, root, fid, { cat: 'flight', title: `${data.flightNo || '항공'} ${data.dep || ''}→${data.arr || ''}` });
           save(); close(); render(); toast('저장했어요');
         });
@@ -1602,6 +1692,7 @@
   }
 
   // ───────── 이벤트 ─────────
+  let delItemTimer;
   app.addEventListener('click', e => {
     const cp = e.target.closest('[data-copy]');
     if (cp) {
@@ -1612,9 +1703,24 @@
     if (e.target.closest('[data-stop]')) return;
     const el = e.target.closest('[data-act]'); if (!el) return;
     const act = el.dataset.act, id = el.dataset.id, t = curTrip();
-    if (ro() && ['add-exp-check', 'add-stay', 'edit-stay', 'edit-trip', 'add-item', 'edit-item', 'day-title', 'add-flight', 'edit-flight', 'edit-check', 'del-check', 'load-template', 'share', 'add-exp', 'add-exp-item', 'edit-exp', 'edit-rate', 'fetch-rates'].includes(act)) return;
+    if (ro() && ['del-item', 'add-exp-check', 'add-stay', 'edit-stay', 'edit-trip', 'add-item', 'edit-item', 'day-title', 'add-flight', 'edit-flight', 'edit-check', 'del-check', 'share', 'add-exp', 'add-exp-item', 'edit-exp', 'edit-rate', 'fetch-rates'].includes(act)) return;
     switch (act) {
       case 'add-exp': expSheet(t, null); break;
+      case 'del-item': {
+        if (!el.classList.contains('armed')) {
+          app.querySelectorAll('.del-item.armed').forEach(b => { b.classList.remove('armed'); b.innerHTML = ICON.trash; });
+          el.classList.add('armed'); el.innerHTML = `${ICON.trash}삭제`;
+          toast('한 번 더 누르면 지워져요');
+          clearTimeout(delItemTimer);
+          delItemTimer = setTimeout(() => { el.classList.remove('armed'); el.innerHTML = ICON.trash; }, 4000);
+          break;
+        }
+        clearTimeout(delItemTimer);
+        t.items = t.items.filter(x => x.id !== id);
+        (t.expenses || []).forEach(e => { if (e.itemId === id) e.itemId = ''; }); // 경비는 남기고 연결만 풀기
+        save(); render(); toast('일정을 지웠어요');
+        break;
+      }
       case 'add-stay': staySheet(t, null); break;
       case 'add-exp-check': { const c = t.checklist.find(x => x.id === id); if (c) expSheet(t, null, checkPreset(c)); break; }
       case 'edit-stay': staySheet(t, (t.stays || []).find(x => x.id === id)); break;
@@ -1654,12 +1760,6 @@
         });
         break;
       }
-      case 'load-template': {
-        const have = new Set(t.checklist.map(c => c.text));
-        const add = templateChecklist(isDomestic(t)).filter(c => !have.has(c.text));
-        t.checklist.push(...add); save(); render(); toast(add.length ? `기본 항목 ${add.length}개를 추가했어요` : '기본 항목이 이미 다 있어요');
-        break;
-      }
     }
   });
   app.addEventListener('keydown', e => {
@@ -1676,13 +1776,17 @@
     if (e.target.id !== 'add-check-form') return;
     e.preventDefault();
     const t = curTrip(); const text = $('#new-check-text').value.trim(); if (!text) return;
-    const due = $('#new-check-due').value;
-    t.checklist.push({ id: uid(), text, cat: $('#new-check-cat').value, due: due === '' ? null : Number(due), done: false, memo: '' });
-    save(); render(); $('#new-check-text')?.focus();
+    const costRaw = $('#new-check-cost').value.trim(), cost = Math.round(parseAmount(costRaw));
+    if (costRaw && !cost) { toast('비용은 숫자로 넣어 주세요'); return; }
+    const c = { id: uid(), text, cat: '기타', due: null, done: false, memo: '' };
+    t.checklist.push(c);
+    if (cost) { t.expenses = t.expenses || []; t.expenses.push({ id: uid(), date: '', itemId: c.id, title: shortText(text), cat: 'prep', amount: cost, currency: 'KRW', krw: null, pay: 'card', memo: '' }); }
+    save(); render(); toast(cost ? `추가했어요 · 비용 ${fmtNum(cost)}원은 경비 탭에 들어갔어요` : '추가했어요'); $('#new-check-text')?.focus();
   });
   window.addEventListener('afterprint', () => { $('#print-root').innerHTML = ''; });
 
   if (state.seeded) { delete state.seeded; save(); }
+  seedFlightMemo();
   if (ui.view === 'shared') ui.view = 'home';
   render();
   const openFromHash = () => { const m = location.hash.match(/^#s=([01]\.[A-Za-z0-9_-]+)$/); if (m) openShared(m[1], location.href); };
