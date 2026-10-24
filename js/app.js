@@ -1471,8 +1471,33 @@
   };
   const pipeBytes = async (bytes, stream) => new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer());
 
+  // 링크를 짧게: 빈 값은 빼고(받는 쪽에서 기본값으로 채워요), 일정·숙소·체크리스트·경비 id는 짧은 번호로 바꿔요
+  // (여행 id와 항공편 id는 '내 앱에 저장'할 때 같은 여행·예약번호를 찾는 데 써서 그대로 둬요)
+  function compactForShare(trip) {
+    const c = JSON.parse(JSON.stringify(trip));
+    const map = {}; let n = 0;
+    const short = o => { if (o && o.id) { map[o.id] = (n++).toString(36); o.id = map[o.id]; } };
+    ['items', 'stays', 'checklist', 'expenses'].forEach(k => (c[k] || []).forEach(short));
+    (c.expenses || []).forEach(e => { if (e.itemId && map[e.itemId]) e.itemId = map[e.itemId]; });
+    const strip = v => {
+      if (Array.isArray(v)) return v.map(strip);
+      if (v && typeof v === 'object') {
+        const o = {};
+        Object.entries(v).forEach(([k, x]) => {
+          x = strip(x);
+          if (x === '' || x === null || x === undefined || x === false) return;
+          if (Array.isArray(x) && !x.length) return;
+          if (x && typeof x === 'object' && !Array.isArray(x) && !Object.keys(x).length) return;
+          o[k] = x;
+        });
+        return o;
+      }
+      return v;
+    };
+    return strip(c);
+  }
   async function encodeShare(trip) {
-    const bytes = new TextEncoder().encode(JSON.stringify({ v: 1, trip }));
+    const bytes = new TextEncoder().encode(JSON.stringify({ v: 1, trip: compactForShare(trip) }));
     if (window.CompressionStream) {
       try { return '1.' + b64u(await pipeBytes(bytes, new CompressionStream('deflate-raw'))); } catch (e) { /* 압축 없이 */ }
     }
@@ -1545,6 +1570,10 @@
   function closeShared() { sharedTrip = null; ui.view = 'home'; clearShareHash(); render(); window.scrollTo(0, 0); }
   function saveShared() {
     const t = JSON.parse(JSON.stringify(sharedTrip));
+    // 링크 안의 짧은 번호 id는 기기 안에서 새 id로 바꿔요 (연결된 경비도 함께)
+    const remap = {};
+    ['items', 'stays', 'checklist', 'expenses'].forEach(k => (t[k] || []).forEach(o => { if (o.id && o.id.length < 8) { remap[o.id] = uid(); o.id = remap[o.id]; } }));
+    (t.expenses || []).forEach(e => { if (e.itemId && remap[e.itemId]) e.itemId = remap[e.itemId]; });
     const meta = t.shareMeta || {}; delete t.shareMeta;
     const ex = state.trips.find(x => x.id === t.id);
     const doSave = () => {
@@ -1572,6 +1601,25 @@
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => toast('링크를 복사했어요'), fallback); else fallback();
   }
 
+  // is.gd로 링크 줄이기. 브라우저에서 바로 부를 수 있는 JSONP 방식을 써요
+  function shortenUrl(url) {
+    return new Promise((resolve, reject) => {
+      if (url.length > 4900) { reject(new Error('too-long')); return; }
+      const cb = '__isgd' + Date.now();
+      const sc = document.createElement('script');
+      const done = () => { delete window[cb]; sc.remove(); clearTimeout(timer); };
+      const timer = setTimeout(() => { done(); reject(new Error('timeout')); }, 10000);
+      window[cb] = res => {
+        done();
+        if (res && typeof res.shorturl === 'string' && /^https:\/\/is\.gd\/[A-Za-z0-9_]+$/.test(res.shorturl)) resolve(res.shorturl);
+        else reject(new Error((res && res.errormessage) || 'fail'));
+      };
+      sc.src = `https://is.gd/create.php?format=json&logstats=0&callback=${cb}&url=${encodeURIComponent(url)}`;
+      sc.onerror = () => { done(); reject(new Error('network')); };
+      document.head.appendChild(sc);
+    });
+  }
+
   function shareSheet(t) {
     let link = '';
     openSheet('가족에게 일정 공유', `
@@ -1582,16 +1630,22 @@
         <label class="check-inline"><input type="checkbox" id="s-pnr"> 항공 예약번호</label>
         <div class="note-small">예약번호는 이름과 함께 있으면 예약 변경·취소에 쓰일 수 있어서 기본으로 빼 뒀어요.</div>
       </div>
-      <label class="field"><span>공유 링크</span><input type="text" id="s-link" readonly value="만드는 중…"></label>
+      <label class="field"><span>공유 링크 <span class="hint" id="s-len"></span></span><input type="text" id="s-link" readonly value="만드는 중…"></label>
+      <div class="short-box">
+        <button type="button" class="btn sm" id="s-short" disabled>짧은 링크 만들기</button>
+        <span class="note-small">is.gd(무료 링크 줄이기 서비스)에 일정이 담긴 링크가 저장돼요. 짧은 링크를 아는 사람은 누구나 열 수 있어요.</span>
+      </div>
       <div class="ap-preview" id="s-msg"></div>`,
       `<button type="button" class="btn" id="s-copy" disabled>링크 복사</button><button type="submit" class="btn primary" disabled>${ICON.share}카톡·메시지로 보내기</button>`,
       (root) => {
         const btns = root.querySelectorAll('#s-copy, button[type=submit]');
         const gen = async () => {
-          btns.forEach(b => { b.disabled = true; });
+          btns.forEach(b => { b.disabled = true; }); $('#s-short', root).disabled = true;
           const code = await encodeShare(shareable(t, { check: $('#s-check', root).checked, pnr: $('#s-pnr', root).checked, exp: $('#s-exp', root).checked }));
           link = `${location.origin}${location.pathname}#s=${code}`;
           $('#s-link', root).value = link;
+          $('#s-len', root).textContent = `(${link.length.toLocaleString()}자)`;
+          $('#s-short', root).disabled = false; $('#s-short', root).textContent = '짧은 링크 만들기';
           const msgs = [];
           if (IN_FRAME) msgs.push('미리보기 화면에서 만든 링크는 가족이 열 수 없어요. 실제 앱 주소에 올린 뒤에 보내세요. (복사해서 불러오기에 붙여넣으면 받는 화면은 미리 볼 수 있어요)');
           if (link.length > 6000) msgs.push(`링크가 길어요(${link.length.toLocaleString()}자). 일부 앱에서 잘릴 수 있으니 체크리스트를 빼거나 PDF로 보내 보세요.`);
@@ -1602,6 +1656,19 @@
         gen();
         $('#s-link', root).addEventListener('focus', e => e.target.select());
         $('#s-copy', root).addEventListener('click', () => copyText(link));
+        $('#s-short', root).addEventListener('click', async ev => {
+          const b = ev.currentTarget; b.disabled = true; b.textContent = '만드는 중…';
+          try {
+            link = await shortenUrl(link);
+            $('#s-link', root).value = link; $('#s-len', root).textContent = `(${link.length}자)`;
+            b.textContent = '짧은 링크 완성';
+          } catch (err) {
+            b.disabled = false; b.textContent = '짧은 링크 만들기';
+            $('#s-msg', root).textContent = err.message === 'too-long'
+              ? '일정이 많아 짧은 링크를 만들 수 없어요(is.gd는 5,000자까지). 체크리스트나 경비를 빼고 다시 해 보세요.'
+              : '짧은 링크를 만들지 못했어요. 인터넷 연결을 확인하거나 긴 링크를 그대로 보내세요.';
+          }
+        });
         $('#sheet-form', root).addEventListener('submit', e => {
           e.preventDefault();
           if (navigator.share) navigator.share({ title: tripName(t), text: `${tripName(t)} 여행 일정이에요.`, url: link }).catch(err => { if (err && err.name !== 'AbortError') copyText(link); });
