@@ -215,10 +215,25 @@ body::before {
 .tl-item { display: grid; grid-template-columns: 54px 22px 1fr; gap: 0 6px; }
 .tl-time { padding-top: 12px; text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 500; }
 .tl-time small { display: block; color: var(--muted); font-size: 11px; font-weight: 400; }
-.item-move { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; margin-top: 6px; }
-.item-move .btn { width: 30px; min-height: 26px; padding: 0; border-color: var(--line); background: var(--surface); }
-.item-move .btn svg { width: 15px; height: 15px; }
-.item-move .btn:disabled { opacity: .25; cursor: default; }
+.sel-box { display: block; margin: 8px 0 0 auto; width: 24px; height: 24px; padding: 0; border-radius: 50%; border: 2px solid var(--muted); background: var(--surface); cursor: pointer; position: relative; }
+.sel-box.on { background: var(--accent); border-color: var(--accent); }
+.sel-box.on::after { content: ""; position: absolute; left: 7px; top: 3px; width: 6px; height: 11px; border: solid var(--accent-ink); border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); }
+.tl-item.selected .tl-card { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.move-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; background: var(--surface); border-top: 1px solid var(--line); box-shadow: 0 -4px 16px rgba(0, 0, 0, .12);
+  padding: 10px max(16px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+}
+.mb-inner { max-width: 760px; margin: 0 auto; display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; align-items: center; }
+.mb-info { min-width: 0; display: grid; }
+.mb-info b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mb-info span { font-size: 11px; color: var(--muted); }
+.move-bar .btn:disabled { opacity: .35; cursor: default; }
+body.has-move-bar .wrap { padding-bottom: 110px; }
+body.has-move-bar #toast { bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
+@media (max-width: 480px) {
+  .mb-inner { grid-template-columns: 1fr 1fr auto; }
+  .mb-info { grid-column: 1 / -1; }
+}
 .tl-rail { position: relative; }
 .tl-rail::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--line); }
 .tl-item:first-child .tl-rail::before { top: 16px; }

@@ -188,6 +188,7 @@
     try { return JSON.parse(localStorage.getItem(UI_KEY)) || { view: 'home' }; } catch (e) { return { view: 'home' }; }
   }
   function saveUI() { try { localStorage.setItem(UI_KEY, JSON.stringify(ui)); } catch (e) { /* 무시 */ } }
+  let selItem = null; // 순서를 옮기려고 체크한 일정 id
   let sharedTrip = null; // 공유 링크로 받아서 아직 저장하지 않은 여행
   let sharedLink = '';
   const ro = () => ui.view === 'shared'; // 보기 전용 화면인지
@@ -463,7 +464,37 @@
           <button role="tab" aria-selected="${tab === 'money'}" data-act="tab" data-tab="money">경비</button>
         </nav>
         <div id="tab-body">${tab === 'flights' ? flightsTab(t) : tab === 'stay' ? stayTab(t) : tab === 'check' ? checkTab(t) : tab === 'money' ? moneyTab(t) : planTab(t)}</div>
-      </div>`;
+      </div>
+      ${moveBar(t, tab)}`;
+    document.body.classList.toggle('has-move-bar', !!app.querySelector('.move-bar'));
+  }
+
+  // 체크한 일정을 같은 날 안에서 위아래로 옮기는 아래 막대
+  function moveBar(t, tab) {
+    const it = selItem && tab === 'plan' && !ro() ? (t.items || []).find(x => x.id === selItem) : null;
+    if (!it) { selItem = null; return ''; }
+    const same = dayEntries(t, it.date).filter(e => e.kind === 'item').map(e => e.i);
+    const k = same.indexOf(it);
+    return `<div class="move-bar" role="toolbar" aria-label="일정 순서 옮기기">
+      <div class="mb-inner">
+        <div class="mb-info"><b>${esc(it.title)}</b><span>${k + 1}/${same.length}번째 · 옮기면 시간도 서로 바뀌어요</span></div>
+        <button class="btn" data-act="move-sel" data-dir="-1" ${k > 0 ? '' : 'disabled'}>${ICON.up}위로</button>
+        <button class="btn" data-act="move-sel" data-dir="1" ${k < same.length - 1 ? '' : 'disabled'}>${ICON.down}아래로</button>
+        <button class="btn primary" data-act="sel-done">완료</button>
+      </div>
+    </div>`;
+  }
+  // 같은 날 바로 앞·뒤 일정과 자리를 바꿔요. 시간순 정렬이라 시간도 함께 맞바꿔야 순서가 유지돼요
+  function moveItem(t, id, dir) {
+    const it = t.items.find(x => x.id === id); if (!it) return false;
+    const same = dayEntries(t, it.date).filter(e => e.kind === 'item').map(e => e.i);
+    const other = same[same.indexOf(it) + dir];
+    if (!other) return false;
+    [it.time, other.time] = [other.time, it.time];
+    [it.endTime, other.endTime] = [other.endTime, it.endTime];
+    const a = t.items.indexOf(it), b = t.items.indexOf(other); // 시간이 없는 일정은 목록 순서로 정렬돼서 자리도 바꿔요
+    [t.items[a], t.items[b]] = [t.items[b], t.items[a]];
+    return true;
   }
 
   // ── 일정 탭
@@ -536,12 +567,9 @@
     const sp = money && money.byItem[i.id];
     const foreign = sp ? Object.entries(sp.cur).filter(([c]) => c !== 'KRW').map(([c, a]) => fmtMoney(a, c)).join(' + ') : '';
     return `
-      <li class="tl-item">
+      <li class="tl-item ${selItem === i.id ? 'selected' : ''}" id="it-${i.id}">
         <div class="tl-time">${esc(i.time || '—')}${i.endTime ? `<small>~${esc(i.endTime)}</small>` : ''}${showDate ? `<small>${fmtD(i.date)}</small>` : ''}
-          ${move && !ro() && (move.up || move.down) ? `<div class="item-move">
-            <button class="btn icon sm ghost" data-act="move-item" data-id="${i.id}" data-dir="-1" ${move.up ? '' : 'disabled'} aria-label="${esc(i.title)} 위로">${ICON.up}</button>
-            <button class="btn icon sm ghost" data-act="move-item" data-id="${i.id}" data-dir="1" ${move.down ? '' : 'disabled'} aria-label="${esc(i.title)} 아래로">${ICON.down}</button>
-          </div>` : ''}</div>
+          ${move && !ro() && (move.up || move.down) ? `<button class="sel-box ${selItem === i.id ? 'on' : ''}" data-act="sel-item" data-id="${i.id}" aria-pressed="${selItem === i.id}" aria-label="${esc(i.title)} 순서 옮기기 선택"></button>` : ''}</div>
         <div class="tl-rail"><span class="tl-dot"></span></div>
         <div class="tl-card" ${ro() ? '' : `data-act="edit-item" data-id="${i.id}" role="button" tabindex="0"`}>
           <div class="tl-type">${ICON[i.type] || ICON.etc}${TYPE_LABEL[i.type] || '기타'}</div>
@@ -1721,19 +1749,16 @@
     if (e.target.closest('[data-stop]')) return;
     const el = e.target.closest('[data-act]'); if (!el) return;
     const act = el.dataset.act, id = el.dataset.id, t = curTrip();
-    if (ro() && ['move-item', 'move-day', 'del-item', 'add-exp-check', 'add-stay', 'edit-stay', 'edit-trip', 'add-item', 'edit-item', 'day-title', 'add-flight', 'edit-flight', 'edit-check', 'del-check', 'share', 'add-exp', 'add-exp-item', 'edit-exp', 'edit-rate', 'fetch-rates'].includes(act)) return;
+    if (ro() && ['sel-item', 'move-sel', 'sel-done', 'move-day', 'del-item', 'add-exp-check', 'add-stay', 'edit-stay', 'edit-trip', 'add-item', 'edit-item', 'day-title', 'add-flight', 'edit-flight', 'edit-check', 'del-check', 'share', 'add-exp', 'add-exp-item', 'edit-exp', 'edit-rate', 'fetch-rates'].includes(act)) return;
     switch (act) {
       case 'add-exp': expSheet(t, null); break;
-      case 'move-item': {
-        const it = t.items.find(x => x.id === id); if (!it) break;
-        const same = dayEntries(t, it.date).filter(e => e.kind === 'item').map(e => e.i);
-        const k = same.indexOf(it), other = same[k + Number(el.dataset.dir)];
-        if (!other) break;
-        [it.time, other.time] = [other.time, it.time];
-        [it.endTime, other.endTime] = [other.endTime, it.endTime];
-        const a = t.items.indexOf(it), b = t.items.indexOf(other); // 시간이 없는 일정은 목록 순서로 정렬돼서 자리도 바꿔요
-        [t.items[a], t.items[b]] = [t.items[b], t.items[a]];
-        save(); render(); toast('순서를 바꿨어요 · 두 일정의 시간도 서로 바꿨어요');
+      case 'sel-item': selItem = selItem === id ? null : id; render(); break;
+      case 'sel-done': selItem = null; render(); break;
+      case 'move-sel': {
+        if (selItem && moveItem(t, selItem, Number(el.dataset.dir))) {
+          save(); render();
+          $('#it-' + selItem)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
         break;
       }
       case 'move-day': {
@@ -1777,10 +1802,10 @@
       case 'new-trip': tripSheet(null); break;
       case 'del-example': deleteTrips(x => x.example); toast('예시 여행을 지웠어요'); break;
       case 'backup': backupSheet(); break;
-      case 'open-trip': ui.tripId = id; ui.view = 'trip'; ui.tab = ui.tab || 'plan'; render(); window.scrollTo(0, 0); break;
-      case 'home': ui.view = 'home'; render(); window.scrollTo(0, 0); break;
+      case 'open-trip': selItem = null; ui.tripId = id; ui.view = 'trip'; ui.tab = ui.tab || 'plan'; render(); window.scrollTo(0, 0); break;
+      case 'home': selItem = null; ui.view = 'home'; render(); window.scrollTo(0, 0); break;
       case 'edit-trip': tripSheet(t); break;
-      case 'tab': ui.tab = el.dataset.tab; render(); break;
+      case 'tab': selItem = null; ui.tab = el.dataset.tab; render(); break;
       case 'pdf': pdfSheet(t); break;
       case 'day-title': dayTitleSheet(t, el.dataset.date); break;
       case 'add-item': itemSheet(t, null, el.dataset.date); break;
