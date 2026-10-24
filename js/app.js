@@ -55,7 +55,6 @@
   const TYPE_TO_EXP = { move: 'move', sight: 'tour', food: 'food', stay: 'stay', shop: 'shop', etc: 'etc' };
   const PAYS = [['card', '카드'], ['cash', '현금'], ['etc', '기타']];
   const PAY_LABEL = Object.fromEntries(PAYS);
-  const DUE_OPTS = [[null, '기한 없음'], [60, 'D-60'], [30, 'D-30'], [14, 'D-14'], [7, 'D-7'], [3, 'D-3'], [1, 'D-1'], [0, '출발일']];
 
   // ───────── 기본 도구 ─────────
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -827,24 +826,16 @@
     const done = list.filter(c => c.done).length;
     const pct = list.length ? Math.round(done / list.length * 100) : 0;
     const dd = dday(t);
-    const today = todayStr();
-    const over = list.filter(c => !c.done && isOver(t, c, today)).length;
     const ids = new Set(list.map(c => c.id));
     const prepCost = (t.expenses || []).filter(e => ids.has(e.itemId)).reduce((a, e) => a + (krwOf(t, e) || 0), 0);
-    const cats = CATS.filter(c => list.some(x => (x.cat || '기타') === c));
     return `
       <div class="progress-card">
         <div class="row"><span class="big num">${done}<small>/${list.length}</small></span><span class="grow" style="flex:1">완료 · ${pct}%</span><span class="dchip ${dd.cls}">${dd.text}</span></div>
         <div class="bar"><i style="width:${pct}%"></i></div>
-        ${over ? `<div class="note-small" style="color:var(--warn);font-weight:600">기한이 지난 항목이 ${over}개 있어요.</div>` : ''}
         ${prepCost ? `<div class="note-small">준비 비용 <b class="num" style="color:var(--ink)">${fmtNum(prepCost)}원</b> · 경비 탭 합계에 들어가 있어요</div>` : ''}
       </div>
       ${list.length === 0 ? `<div class="empty">${ro() ? '함께 보낸 준비 항목이 없어요.' : '준비할 일을 아래에 추가하세요. 비용이 드는 일은 금액도 같이 넣으면 경비 탭에 들어가요.'}</div>` : ''}
-      ${cats.map(c => {
-        const items = list.filter(x => (x.cat || '기타') === c);
-        return `<section class="cat"><h3>${esc(c === '기타' ? '할 일' : c)} <span class="num">${items.filter(x => x.done).length}/${items.length}</span></h3>
-          <ul class="check-list">${items.map(x => checkRow(t, x, today)).join('')}</ul></section>`;
-      }).join('')}
+      ${list.length ? `<ul class="check-list">${list.map(x => checkRow(t, x)).join('')}</ul>` : ''}
       ${ro() ? '' : `<form class="add-check" id="add-check-form">
         <input type="text" id="new-check-text" placeholder="새 할 일 (예: 여행자보험 가입)" aria-label="새 할 일" required>
         <div class="won-input"><input type="text" id="new-check-cost" inputmode="numeric" placeholder="비용 (선택)" aria-label="비용" autocomplete="off"><span>원</span></div>
@@ -852,11 +843,7 @@
       </form>
 `}`;
   }
-  function dueDate(t, c) { return (c.due == null || c.due === '' || !t.startDate) ? null : addDays(t.startDate, -Number(c.due)); }
-  function isOver(t, c, today) { const d = dueDate(t, c); return d ? today > d : false; }
-  function checkRow(t, c, today) {
-    const d = dueDate(t, c);
-    const over = !c.done && isOver(t, c, today);
+  function checkRow(t, c) {
     const costs = (t.expenses || []).filter(e => e.itemId === c.id);
     const krw = costs.reduce((a, e) => a + (krwOf(t, e) || 0), 0);
     return `
@@ -864,7 +851,6 @@
         <label class="box"><input type="checkbox" data-act="toggle-check" data-id="${c.id}" ${c.done ? 'checked' : ''} ${ro() ? 'disabled' : ''} aria-label="${esc(c.text)} 완료"></label>
         <div class="txt" ${ro() ? '' : `data-act="edit-check" data-id="${c.id}" role="button" tabindex="0"`}>
           <div class="t">${esc(c.text)}</div>
-          ${d ? `<div class="due ${over ? 'over' : ''}">${Number(c.due) === 0 ? '출발일' : 'D-' + c.due}까지 · ${fmtD(d)}${over ? ' · 기한 지남' : ''}</div>` : ''}
           ${c.memo ? `<div class="memo">${esc(c.memo)}</div>` : ''}
           ${costs.length ? `<div class="check-cost num">${fmtNum(krw)}원${costs.some(e => e.currency !== 'KRW') ? ` <small>(${esc(costs.map(e => fmtMoney(e.amount, e.currency)).join(' + '))})</small>` : ''}</div>` : ''}
         </div>
@@ -1334,22 +1320,17 @@
   function checkSheet(t, c) {
     openSheet('할 일 수정', `
       <label class="field"><span>할 일</span><input type="text" id="f-text" value="${esc(c.text)}"></label>
-      <div class="grid2">
-        <label class="field"><span>분류</span><select id="f-cat">${CATS.map(x => `<option ${x === c.cat ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
-        <label class="field"><span>기한</span><select id="f-due">${DUE_OPTS.map(([v, l]) => `<option value="${v ?? ''}" ${String(v ?? '') === String(c.due ?? '') ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-      </div>
+      ${sheetCostHtml(t, c.id, '비용', '넣으면 경비 탭에 함께 들어가요')}
       <label class="field"><span>메모</span><textarea id="f-memo">${esc(c.memo || '')}</textarea></label>
-      <div class="field"><span>이 항목의 비용</span>
-        ${(t.expenses || []).filter(e => e.itemId === c.id).map(e => `<div class="ex-mini"><span>${esc(e.title || EXP_LABEL[e.cat])}</span><span class="num">${esc(fmtMoney(e.amount, e.currency))}</span></div>`).join('') || '<div class="note-small">아직 없어요</div>'}
-        <button type="button" class="btn sm" id="f-addexp" style="justify-self:start">${ICON.plus}비용 추가</button></div>`,
+      <div class="ap-preview" id="f-err" style="color:var(--warn)"></div>`,
       `<button type="button" class="btn" data-close="1">취소</button><button type="submit" class="btn primary">저장</button>`,
       (root, close) => {
-        $('#f-addexp', root).addEventListener('click', () => { close(); expSheet(t, null, checkPreset(c)); });
         $('#sheet-form', root).addEventListener('submit', e => {
           e.preventDefault();
-          const text = val(root, 'f-text'); if (!text) return;
-          const due = val(root, 'f-due');
-          Object.assign(c, { text, cat: val(root, 'f-cat'), due: due === '' ? null : Number(due), memo: val(root, 'f-memo') });
+          const text = val(root, 'f-text'); if (!text) { $('#f-err', root).textContent = '할 일을 적어 주세요.'; return; }
+          const costErr = checkSheetCost(root); if (costErr) { $('#f-err', root).textContent = costErr; return; }
+          Object.assign(c, { text, memo: val(root, 'f-memo') }); // 예전 분류·기한 값은 그대로 두고 화면에서만 안 써요
+          applySheetCost(t, root, c.id, { cat: 'prep', title: shortText(text) });
           save(); close(); render();
         });
       });
@@ -1662,8 +1643,7 @@
     }
     if (o.check && (t.checklist || []).length) {
       const list = t.checklist;
-      h += `<h2>준비 체크리스트 (${list.filter(c => c.done).length}/${list.length})</h2>` + CATS.filter(c => list.some(x => (x.cat || '기타') === c)).map(c =>
-        `<div class="r-block" style="margin-bottom:6px"><b style="font-size:12px;color:#5B6472">${esc(c)}</b><div class="r-check">${list.filter(x => (x.cat || '기타') === c).map(x => `<div><span class="bx">${x.done ? '☑' : '☐'}</span><span>${esc(x.text)}${dueDate(t, x) ? ` <span style="color:#5B6472">(${fmtD(dueDate(t, x))}까지)</span>` : ''}</span></div>`).join('')}</div></div>`).join('');
+      h += `<h2>준비 체크리스트 (${list.filter(c => c.done).length}/${list.length})</h2><div class="r-check">${list.map(x => `<div class="r-block"><span class="bx">${x.done ? '☑' : '☐'}</span><span>${esc(x.text)}</span></div>`).join('')}</div>`;
     }
     if (o.money && (t.expenses || []).length) {
       const m = expTotals(t);
