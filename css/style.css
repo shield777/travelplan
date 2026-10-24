@@ -215,9 +215,11 @@ body::before {
 .tl-item { display: grid; grid-template-columns: 54px 22px 1fr; gap: 0 6px; }
 .tl-time { padding-top: 12px; text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 500; }
 .tl-time small { display: block; color: var(--muted); font-size: 11px; font-weight: 400; }
-.sel-box { display: block; margin: 8px 0 0 auto; width: 24px; height: 24px; padding: 0; border-radius: 50%; border: 2px solid var(--muted); background: var(--surface); cursor: pointer; position: relative; }
-.sel-box.on { background: var(--accent); border-color: var(--accent); }
-.sel-box.on::after { content: ""; position: absolute; left: 7px; top: 3px; width: 6px; height: 11px; border: solid var(--accent-ink); border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); }
+/* 순서 옮기기 선택 동그라미: 작고 흐리게 (누르는 범위는 ::before로 넉넉하게) */
+.sel-box { display: block; margin: 8px 0 0 auto; width: 16px; height: 16px; padding: 0; border-radius: 50%; border: 1.5px solid var(--line); background: transparent; cursor: pointer; position: relative; opacity: .8; }
+.sel-box::before { content: ""; position: absolute; inset: -12px; }
+.sel-box.on { background: var(--accent); border-color: var(--accent); opacity: 1; }
+.sel-box.on::after { content: ""; position: absolute; left: 4px; top: 1px; width: 4px; height: 8px; border: solid var(--accent-ink); border-width: 0 2px 2px 0; transform: rotate(45deg); }
 .tl-item.selected .tl-card { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .move-bar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; background: var(--surface); border-top: 1px solid var(--line); box-shadow: 0 -4px 16px rgba(0, 0, 0, .12);
@@ -424,11 +426,9 @@ body.has-move-bar #toast { bottom: calc(90px + env(safe-area-inset-bottom, 0px))
 .tl-spent { font-size: 13px; font-weight: 500; color: var(--accent); margin-top: 2px; }
 .tl-spent small { color: var(--muted); font-weight: 400; }
 .card-acts { position: absolute; top: 4px; right: 4px; display: flex; gap: 2px; }
-.add-exp { min-height: 28px; padding: 0 8px; font-size: 12px; color: var(--muted); }
 .del-item { min-height: 28px; min-width: 30px; padding: 0 7px; font-size: 12px; color: var(--muted); }
 .del-item svg { width: 14px; height: 14px; }
 .del-item.armed { background: var(--warn); border-color: var(--warn); color: var(--surface); }
-.add-exp svg { width: 14px; height: 14px; }
 .money-hero { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; display: grid; gap: 4px; margin-bottom: 14px; }
 .money-hero .lbl { font-size: 12px; color: var(--muted); letter-spacing: .06em; font-weight: 600; }
 .money-hero .big { font-family: var(--font-display); font-weight: 700; font-size: 44px; line-height: 1; letter-spacing: .01em; }
@@ -464,7 +464,6 @@ body.has-move-bar #toast { bottom: calc(90px + env(safe-area-inset-bottom, 0px))
 .ex-amt { text-align: right; white-space: nowrap; }
 .ex-amt > .num { font-weight: 500; }
 .ex-krw { font-size: 12px; color: var(--muted); }
-.ex-mini { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; border-bottom: 1px dashed var(--line); }
 .krw-preview { font-size: 14px; min-height: 1.4em; margin-top: -4px; }
 .krw-preview b { color: var(--accent); font-family: var(--font-mono); font-weight: 500; }
 .krw-preview span { color: var(--muted); font-size: 12px; }

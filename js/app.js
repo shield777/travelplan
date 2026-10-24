@@ -573,7 +573,7 @@
           ${i.memo ? `<div class="tl-memo">${esc(i.memo)}</div>` : ''}
           ${i.cost ? `<div class="tl-cost">${esc(i.cost)}</div>` : ''}
           ${sp ? `<div class="tl-spent num">${fmtNum(sp.krw)}원${foreign ? ` <small>(${esc(foreign)})</small>` : ''}</div>` : ''}
-          ${ro() ? '' : `<div class="card-acts"><button class="btn sm ghost add-exp" data-act="add-exp-item" data-id="${i.id}" aria-label="${esc(i.title)} 경비 추가">${ICON.plus}경비</button><button class="btn sm ghost del-item" data-act="del-item" data-id="${i.id}" aria-label="${esc(i.title)} 삭제">${ICON.trash}</button></div>`}
+          ${ro() ? '' : `<div class="card-acts"><button class="btn sm ghost del-item" data-act="del-item" data-id="${i.id}" aria-label="${esc(i.title)} 삭제">${ICON.trash}</button></div>`}
         </div>
       </li>`;
   }
@@ -1023,9 +1023,7 @@
       <label class="field"><span>장소 · 주소 <span class="hint">${isDomestic(t) ? '국내 여행이라 네이버지도 앱으로 열려요' : '해외 여행이라 구글맵 앱으로 열려요'}</span></span><input type="text" id="f-place" value="${esc(item.place)}" placeholder="${isDomestic(t) ? '예: 제주 애월읍 애월해안로 272' : '예: Kiyomizu-dera 또는 현지 주소'}"></label>
       <label class="field"><span>메모</span><textarea id="f-memo">${esc(item.memo)}</textarea></label>
       ${item.cost ? `<label class="field"><span>비용 메모 <span class="hint">(이전 방식 · 합계에는 안 들어가요)</span></span><input type="text" id="f-cost" value="${esc(item.cost)}"></label>` : ''}
-      ${isNew ? '<div class="note-small">저장한 뒤 일정 카드의 <b>+경비</b>로 쓴 돈을 넣을 수 있어요.</div>' : `<div class="field"><span>이 일정의 경비</span>
-        ${(t.expenses || []).filter(e => e.itemId === item.id).map(e => `<div class="ex-mini"><span>${esc(e.title || EXP_LABEL[e.cat])}</span><span class="num">${esc(fmtMoney(e.amount, e.currency))}</span></div>`).join('') || '<div class="note-small">아직 없어요</div>'}
-        <button type="button" class="btn sm" id="f-addexp" style="justify-self:start">${ICON.plus}이 일정에 경비 추가</button></div>`}
+      ${itemCostHtml(t, isNew ? '' : item.id)}
       <div class="ap-preview" id="f-err" style="color:var(--warn)"></div>`,
       `${isNew ? '' : `<button type="button" class="btn danger left" id="f-del">${ICON.trash}삭제</button>`}<button type="button" class="btn" data-close="1">취소</button><button type="submit" class="btn primary">저장</button>`,
       (root, close) => {
@@ -1034,21 +1032,63 @@
           (t.expenses || []).forEach(e => { if (e.itemId === item.id) e.itemId = ''; }); // 경비는 남기고 연결만 풀기
           save(); close(); render(); toast('일정을 삭제했어요');
         });
-        $('#f-addexp', root)?.addEventListener('click', () => { close(); expSheet(t, null, expPreset(item)); });
+        const updCost = () => {
+          const box = $('#c-prev', root); if (!box) return;
+          const amt = parseAmount(val(root, 'c-amt')), c = $('#c-cur', root).value;
+          box.innerHTML = c !== 'KRW' && amt ? (rateOf(t, c) ? `≈ <b>${fmtNum(Math.round(amt * rateOf(t, c)))}원</b> <span>(${esc(rateLabel(t, c))})</span>` : `${esc(curUnit(c))} 환율이 아직 없어요. 저장하면 자동으로 불러와 볼게요.`) : '';
+        };
+        updCost();
+        $('#c-amt', root)?.addEventListener('input', updCost);
+        $('#c-cur', root)?.addEventListener('change', updCost);
         $('#sheet-form', root).addEventListener('submit', e => {
           e.preventDefault();
           const title = val(root, 'f-title');
           if (!title) { $('#f-err', root).textContent = '무엇을 하는지 적어 주세요.'; return; }
+          if (val(root, 'c-amt') && !(parseAmount(val(root, 'c-amt')) > 0)) { $('#f-err', root).textContent = '비용은 숫자로 넣어 주세요.'; return; }
+          const before = { date: item.date, title: item.title };
           const data = { date: val(root, 'f-date'), time: val(root, 'f-time'), endTime: val(root, 'f-end'), type: (root.querySelector('input[name=f-type]:checked') || {}).value || 'etc', title, place: val(root, 'f-place'), memo: val(root, 'f-memo'), cost: val(root, 'f-cost') };
           if (!data.cost) delete data.cost;
-          if (isNew) t.items.push({ id: uid(), ...data }); else { if (!data.cost) delete item.cost; Object.assign(item, data); }
+          const iid = isNew ? uid() : item.id;
+          if (isNew) t.items.push({ id: iid, ...data }); else { if (!data.cost) delete item.cost; Object.assign(item, data); }
+          const cur = applyItemCost(t, root, iid, data, before);
           save(); close(); render(); toast('저장했어요');
+          if (cur && cur !== 'KRW' && !rateOf(t, cur)) updateRates(t, [cur], true);
         });
       });
   }
 
   // 경비
-  const expPreset = item => ({ date: item.date, itemId: item.id, title: item.title, cat: TYPE_TO_EXP[item.type] || 'etc' });
+  // 일정 입력창 안의 비용 칸 (해외 투어는 현지 통화로도 넣을 수 있어요). 연결된 비용이 여러 건이면 경비 탭에서 고치도록 안내해요
+  function itemCostHtml(t, refId) {
+    const linked = refId ? (t.expenses || []).filter(e => e.itemId === refId) : [];
+    if (linked.length > 1) {
+      const krw = linked.reduce((a, e) => a + (krwOf(t, e) || 0), 0);
+      return `<div class="field"><span>비용</span><div class="note-small">비용이 ${linked.length}건 들어 있어요 (합계 ${fmtNum(krw)}원). 경비 탭에서 고치세요.</div></div>`;
+    }
+    const e = linked[0], tc = tripCurrency(t);
+    const cur = e ? e.currency : (isDomestic(t) ? 'KRW' : tc);
+    const curOpts = Array.from(new Set([cur, tc, 'KRW', 'USD', ...Object.keys(CUR)])).filter(c => has(CUR, c));
+    return `<div class="field"><span>비용 <span class="hint">(선택) 넣으면 경비 탭 합계에 들어가요</span></span>
+      <div class="grid2 amt-row"><input type="text" id="c-amt" inputmode="decimal" value="${e ? esc(e.currency === 'KRW' ? fmtNum(e.amount) : e.amount) : ''}" placeholder="0" autocomplete="off" aria-label="비용 금액">
+      <select id="c-cur" aria-label="통화">${curOpts.map(c => `<option value="${c}" ${c === cur ? 'selected' : ''}>${c} · ${CUR[c][0]}</option>`).join('')}</select></div>
+      <div class="krw-preview" id="c-prev"></div></div>`;
+  }
+  // 저장할 때 비용 칸을 경비에 반영해요. 넣은 통화를 돌려줘요 (환율 불러오기용)
+  function applyItemCost(t, root, refId, data, before) {
+    const amt = $('#c-amt', root); if (!amt) return '';
+    t.expenses = t.expenses || [];
+    const ex = t.expenses.find(e => e.itemId === refId);
+    if (!amt.value.trim()) { if (ex) t.expenses = t.expenses.filter(x => x !== ex); return ''; }
+    const currency = $('#c-cur', root).value;
+    let amount = parseAmount(amt.value);
+    if (currency === 'KRW') amount = Math.round(amount);
+    if (ex) {
+      if (ex.amount !== amount || ex.currency !== currency) Object.assign(ex, { amount, currency, krw: null });
+      if (ex.date === before.date) ex.date = data.date;     // 일정 날짜를 옮기면 비용 날짜도 따라가요
+      if (ex.title === before.title) ex.title = data.title;
+    } else t.expenses.push({ id: uid(), date: data.date, itemId: refId, title: data.title, cat: TYPE_TO_EXP[data.type] || 'etc', amount, currency, krw: null, pay: 'card', memo: '' });
+    return currency;
+  }
   const checkPreset = c => ({ date: '', itemId: c.id, title: shortText(c.text), cat: 'prep', currency: 'KRW' });
 
   // 항공편·숙소 입력창 안의 비용 칸 (원화로만 입력). 연결된 비용이 한 건이면 그 비용을 고치고, 여러 건이면 경비 탭에서 고치도록 안내해요
@@ -1987,7 +2027,7 @@
     if (e.target.closest('[data-stop]')) return;
     const el = e.target.closest('[data-act]'); if (!el) return;
     const act = el.dataset.act, id = el.dataset.id, t = curTrip();
-    if (ro() && ['family', 'move-sel', 'sel-done', 'move-day', 'del-item', 'add-exp-check', 'add-stay', 'edit-stay', 'edit-trip', 'add-item', 'edit-item', 'day-title', 'add-flight', 'edit-flight', 'edit-check', 'del-check', 'share', 'add-exp', 'add-exp-item', 'edit-exp', 'edit-rate', 'fetch-rates'].includes(act)) return;
+    if (ro() && ['family', 'move-sel', 'sel-done', 'move-day', 'del-item', 'add-exp-check', 'add-stay', 'edit-stay', 'edit-trip', 'add-item', 'edit-item', 'day-title', 'add-flight', 'edit-flight', 'edit-check', 'del-check', 'share', 'add-exp', 'edit-exp', 'edit-rate', 'fetch-rates'].includes(act)) return;
     switch (act) {
       case 'add-exp': expSheet(t, null); break;
       case 'sel-item': selItem = selItem === id ? null : id; render(); break;
@@ -2026,7 +2066,6 @@
       case 'add-exp-check': { const c = t.checklist.find(x => x.id === id); if (c) expSheet(t, null, checkPreset(c)); break; }
       case 'edit-stay': staySheet(t, (t.stays || []).find(x => x.id === id)); break;
       case 'goto-stay': ui.tab = 'stay'; render(); setTimeout(() => $('#st-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30); break;
-      case 'add-exp-item': { const it = t.items.find(x => x.id === id); if (it) expSheet(t, null, expPreset(it)); break; }
       case 'edit-exp': expSheet(t, (t.expenses || []).find(x => x.id === id)); break;
       case 'edit-rate': rateSheet(t, el.dataset.cur); break;
       case 'fetch-rates': {
