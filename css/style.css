@@ -366,6 +366,9 @@ body::before {
 .ap-none { font-size: 12px; color: var(--muted); }
 
 /* ───── 경비 ───── */
+.day-move { display: flex; gap: 2px; align-self: center; }
+.day-move .btn { width: 32px; min-height: 32px; border-color: var(--line); background: var(--surface); }
+.day-move .btn:disabled { opacity: .3; cursor: default; }
 .day-spent { text-align: right; display: grid; font-size: 11px; color: var(--muted); line-height: 1.2; }
 .day-spent b { font-size: 14px; color: var(--ink); font-weight: 500; }
 .tl-card { position: relative; }
@@ -445,7 +448,7 @@ body::before {
 .check-cost { font-size: 13px; font-weight: 500; color: var(--accent); }
 .check-cost small { color: var(--muted); font-weight: 400; }
 .src-tag { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 700; background: var(--accent-soft); color: var(--accent); cursor: pointer; }
-.add-check { display: grid; grid-template-columns: 1fr 160px auto; gap: 6px; margin-top: 14px; }
+.add-check { display: grid; grid-template-columns: 1fr 110px 140px auto; gap: 6px; margin-top: 14px; }
 .add-check input, .add-check select { min-width: 0; }
 
 /* ───── 폼 / 시트 ───── */
@@ -496,7 +499,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 @media (max-width: 560px) {
   .airport-pair { grid-template-columns: 1fr; }
   .pass-route .code { font-size: 40px; }
-  .add-check { grid-template-columns: 1fr auto; }
+  .add-check { grid-template-columns: 96px 1fr auto; }
   .add-check > input[type=text] { grid-column: 1 / -1; }
   .trip-head h1 { font-size: 24px; }
   .tabs button { font-size: 13px; }

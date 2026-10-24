@@ -25,6 +25,8 @@
     doc: svg('<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 13h6M9 17h6"/>'),
     close: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
     save: svg('<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>'),
+    up: svg('<path d="M6 15l6-6 6 6"/>'),
+    down: svg('<path d="M6 9l6 6 6-6"/>'),
     share: svg('<path d="M12 15V3M7.5 7.5L12 3l4.5 4.5M5 12v8h14v-8"/>')
   };
   const TYPES = [
@@ -32,7 +34,10 @@
     { id: 'stay', label: '숙소' }, { id: 'shop', label: '쇼핑' }, { id: 'etc', label: '기타' }
   ];
   const TYPE_LABEL = Object.fromEntries(TYPES.map(t => [t.id, t.label]));
-  const CATS = ['서류', '예약', '돈', '통신', '짐', '집', '기타'];
+  const CATS = ['서류', '예약', '돈', '통신', '짐', '집', '기타', '투어예약', '사전준비']; // 저장된 값 검사용 (예전 분류 포함)
+  const PREP_CATS = ['투어예약', '사전준비', '기타'];
+  // 예전 분류(서류·예약·돈…)는 '사전준비'로 보여 줘요. 데이터는 바꾸지 않아요
+  const prepCat = c => PREP_CATS.includes(c.cat) ? c.cat : (!c.cat ? '기타' : '사전준비');
   const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
   // 통화: [한글 단위, 소수 자릿수]
   const CUR = {
@@ -489,6 +494,7 @@
   function daySection(t, d, i, today, money) {
     const entries = dayEntries(t, d);
     const title = (t.dayTitles || {})[d];
+    const last = tripDays(t).length - 1;
     return `
       <section class="day" id="day-${d}">
         <div class="day-head">
@@ -499,12 +505,27 @@
               : `<div class="title ${title ? '' : 'placeholder'}" data-act="day-title" data-date="${d}" role="button" tabindex="0">${title ? esc(title) : '이날의 제목'}</div>`}
           </div>
           ${money.byDate[d] ? `<div class="day-spent"><span>이날 경비</span><b class="num">${fmtNum(money.byDate[d])}원</b></div>` : ''}
+          ${ro() || last < 1 ? '' : `<div class="day-move">
+            <button class="btn icon sm ghost" data-act="move-day" data-date="${d}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="${i + 1}일차를 앞날로">${ICON.up}</button>
+            <button class="btn icon sm ghost" data-act="move-day" data-date="${d}" data-dir="1" ${i === last ? 'disabled' : ''} aria-label="${i + 1}일차를 뒷날로">${ICON.down}</button>
+          </div>`}
         </div>
         ${entries.length ? `<ul class="timeline">${entries.map(e => e.kind === 'item' ? itemRow(e.i, false, money, t) : e.s ? stayRow(e.s, e.kind) : flightRow(e.f, e.kind === 'arrive')).join('')}</ul>` : ''}
         ${ro() ? (entries.length ? '' : '<div class="note-small" style="padding-top:8px">일정 없음</div>') : `<div class="add-row" ${entries.length ? '' : 'style="padding-left:0"'}>
           <button class="btn sm" data-act="add-item" data-date="${d}">${ICON.plus}일정 추가</button>
         </div>`}
       </section>`;
+  }
+
+  // 두 날의 일정·제목·경비를 통째로 맞바꿔요 (항공편·숙소는 예약된 날짜라 그대로 둬요)
+  function swapDays(t, a, b) {
+    const flip = o => { if (o.date === a) o.date = b; else if (o.date === b) o.date = a; };
+    (t.items || []).forEach(flip);
+    (t.expenses || []).forEach(flip); // 그날 날짜로 넣은 경비도 같이 옮겨요
+    t.dayTitles = t.dayTitles || {};
+    const ta = t.dayTitles[a], tb = t.dayTitles[b];
+    if (tb) t.dayTitles[a] = tb; else delete t.dayTitles[a];
+    if (ta) t.dayTitles[b] = ta; else delete t.dayTitles[b];
   }
 
   function itemRow(i, showDate, money, t) {
@@ -835,9 +856,13 @@
         ${prepCost ? `<div class="note-small">준비 비용 <b class="num" style="color:var(--ink)">${fmtNum(prepCost)}원</b> · 경비 탭 합계에 들어가 있어요</div>` : ''}
       </div>
       ${list.length === 0 ? `<div class="empty">${ro() ? '함께 보낸 준비 항목이 없어요.' : '준비할 일을 아래에 추가하세요. 비용이 드는 일은 금액도 같이 넣으면 경비 탭에 들어가요.'}</div>` : ''}
-      ${list.length ? `<ul class="check-list">${list.map(x => checkRow(t, x)).join('')}</ul>` : ''}
+      ${PREP_CATS.map(cat => {
+        const items = list.filter(x => prepCat(x) === cat);
+        return items.length ? `<section class="cat"><h3>${cat} <span class="num">${items.filter(x => x.done).length}/${items.length}</span></h3><ul class="check-list">${items.map(x => checkRow(t, x)).join('')}</ul></section>` : '';
+      }).join('')}
       ${ro() ? '' : `<form class="add-check" id="add-check-form">
         <input type="text" id="new-check-text" placeholder="새 할 일 (예: 여행자보험 가입)" aria-label="새 할 일" required>
+        <select id="new-check-cat" aria-label="분류">${PREP_CATS.map(c => `<option ${c === (ui.lastPrepCat || '사전준비') ? 'selected' : ''}>${c}</option>`).join('')}</select>
         <div class="won-input"><input type="text" id="new-check-cost" inputmode="numeric" placeholder="비용 (선택)" aria-label="비용" autocomplete="off"><span>원</span></div>
         <button class="btn primary" type="submit">${ICON.plus}추가</button>
       </form>
@@ -1320,6 +1345,7 @@
   function checkSheet(t, c) {
     openSheet('할 일 수정', `
       <label class="field"><span>할 일</span><input type="text" id="f-text" value="${esc(c.text)}"></label>
+      <div class="field"><span>분류</span><div class="type-pick">${PREP_CATS.map(x => `<label><input type="radio" name="f-pcat" value="${x}" ${x === prepCat(c) ? 'checked' : ''}><span>${x}</span></label>`).join('')}</div></div>
       ${sheetCostHtml(t, c.id, '비용', '넣으면 경비 탭에 함께 들어가요')}
       <label class="field"><span>메모</span><textarea id="f-memo">${esc(c.memo || '')}</textarea></label>
       <div class="ap-preview" id="f-err" style="color:var(--warn)"></div>`,
@@ -1329,7 +1355,9 @@
           e.preventDefault();
           const text = val(root, 'f-text'); if (!text) { $('#f-err', root).textContent = '할 일을 적어 주세요.'; return; }
           const costErr = checkSheetCost(root); if (costErr) { $('#f-err', root).textContent = costErr; return; }
-          Object.assign(c, { text, memo: val(root, 'f-memo') }); // 예전 분류·기한 값은 그대로 두고 화면에서만 안 써요
+          const pcat = (root.querySelector('input[name=f-pcat]:checked') || {}).value || prepCat(c);
+          Object.assign(c, { text, memo: val(root, 'f-memo') });
+          if (pcat !== prepCat(c)) c.cat = pcat; // 분류를 바꿨을 때만 저장 (예전 분류는 그대로 둠)
           applySheetCost(t, root, c.id, { cat: 'prep', title: shortText(text) });
           save(); close(); render();
         });
@@ -1643,7 +1671,10 @@
     }
     if (o.check && (t.checklist || []).length) {
       const list = t.checklist;
-      h += `<h2>준비 체크리스트 (${list.filter(c => c.done).length}/${list.length})</h2><div class="r-check">${list.map(x => `<div class="r-block"><span class="bx">${x.done ? '☑' : '☐'}</span><span>${esc(x.text)}</span></div>`).join('')}</div>`;
+      h += `<h2>준비 체크리스트 (${list.filter(c => c.done).length}/${list.length})</h2>` + PREP_CATS.map(cat => {
+        const items = list.filter(x => prepCat(x) === cat);
+        return items.length ? `<div style="margin:6px 0 2px"><b style="font-size:12px;color:#5B6472">${cat}</b></div><div class="r-check">${items.map(x => `<div class="r-block"><span class="bx">${x.done ? '☑' : '☐'}</span><span>${esc(x.text)}</span></div>`).join('')}</div>` : '';
+      }).join('');
     }
     if (o.money && (t.expenses || []).length) {
       const m = expTotals(t);
@@ -1683,9 +1714,17 @@
     if (e.target.closest('[data-stop]')) return;
     const el = e.target.closest('[data-act]'); if (!el) return;
     const act = el.dataset.act, id = el.dataset.id, t = curTrip();
-    if (ro() && ['del-item', 'add-exp-check', 'add-stay', 'edit-stay', 'edit-trip', 'add-item', 'edit-item', 'day-title', 'add-flight', 'edit-flight', 'edit-check', 'del-check', 'share', 'add-exp', 'add-exp-item', 'edit-exp', 'edit-rate', 'fetch-rates'].includes(act)) return;
+    if (ro() && ['move-day', 'del-item', 'add-exp-check', 'add-stay', 'edit-stay', 'edit-trip', 'add-item', 'edit-item', 'day-title', 'add-flight', 'edit-flight', 'edit-check', 'del-check', 'share', 'add-exp', 'add-exp-item', 'edit-exp', 'edit-rate', 'fetch-rates'].includes(act)) return;
     switch (act) {
       case 'add-exp': expSheet(t, null); break;
+      case 'move-day': {
+        const days = tripDays(t), i = days.indexOf(el.dataset.date), j = i + Number(el.dataset.dir);
+        if (i < 0 || j < 0 || j >= days.length) break;
+        swapDays(t, days[i], days[j]); save(); render();
+        const target = $('#day-' + days[j]); if (target) target.scrollIntoView({ block: 'start' });
+        toast(`${i + 1}일차와 ${j + 1}일차 일정을 바꿨어요`);
+        break;
+      }
       case 'del-item': {
         if (!el.classList.contains('armed')) {
           app.querySelectorAll('.del-item.armed').forEach(b => { b.classList.remove('armed'); b.innerHTML = ICON.trash; });
@@ -1758,7 +1797,8 @@
     const t = curTrip(); const text = $('#new-check-text').value.trim(); if (!text) return;
     const costRaw = $('#new-check-cost').value.trim(), cost = Math.round(parseAmount(costRaw));
     if (costRaw && !cost) { toast('비용은 숫자로 넣어 주세요'); return; }
-    const c = { id: uid(), text, cat: '기타', due: null, done: false, memo: '' };
+    const cat = $('#new-check-cat').value; ui.lastPrepCat = cat;
+    const c = { id: uid(), text, cat, due: null, done: false, memo: '' };
     t.checklist.push(c);
     if (cost) { t.expenses = t.expenses || []; t.expenses.push({ id: uid(), date: '', itemId: c.id, title: shortText(text), cat: 'prep', amount: cost, currency: 'KRW', krw: null, pay: 'card', memo: '' }); }
     save(); render(); toast(cost ? `추가했어요 · 비용 ${fmtNum(cost)}원은 경비 탭에 들어갔어요` : '추가했어요'); $('#new-check-text')?.focus();
