@@ -57,8 +57,12 @@
     '프랑스': 'EUR', '독일': 'EUR', '네덜란드': 'EUR', '이탈리아': 'EUR', '스페인': 'EUR', '오스트리아': 'EUR', '그리스': 'EUR', '포르투갈': 'EUR',
     '크로아티아': 'EUR', '핀란드': 'EUR', '벨기에': 'EUR', '아일랜드': 'EUR'
   };
-  const EXP_CATS = [['flight', '항공'], ['stay', '숙소'], ['move', '교통'], ['food', '식사'], ['tour', '관광·투어'], ['shop', '쇼핑'], ['prep', '준비'], ['etc', '기타']];
+  const EXP_CATS = [['flight', '항공'], ['stay', '숙소'], ['move', '교통'], ['food', '식사'], ['tour', '관광·투어'], ['tourbook', '투어예약'], ['shop', '쇼핑'], ['prep', '사전준비'], ['etc', '기타']];
   const EXP_LABEL = Object.fromEntries(EXP_CATS);
+  // 준비 탭 항목에 연결된 비용은 그 항목의 분류(투어예약·사전준비·기타)로 합산해요 (저장된 값은 그대로 두고 보여 줄 때만)
+  const PREP_EXP = { '투어예약': 'tourbook', '사전준비': 'prep', '기타': 'etc' };
+  const prepOf = (t, id) => (id && (t.checklist || []).find(c => c.id === id)) || null;
+  const expCat = (t, e) => { const c = prepOf(t, e.itemId); return c ? PREP_EXP[prepCat(c)] : e.cat; };
   const TYPE_TO_EXP = { move: 'move', sight: 'tour', food: 'food', stay: 'stay', shop: 'shop', etc: 'etc' };
   const PAYS = [['card', '카드'], ['cash', '현금'], ['etc', '기타']];
   const PAY_LABEL = Object.fromEntries(PAYS);
@@ -132,7 +136,8 @@
       if (e.itemId) { const bi = out.byItem[e.itemId] = out.byItem[e.itemId] || { krw: 0, cur: {} }; bi.cur[e.currency] = (bi.cur[e.currency] || 0) + (Number(e.amount) || 0); if (k != null) bi.krw += k; }
       if (k == null) { out.missing.add(e.currency); return; }
       out.total += k; bc.krw += k;
-      out.byCat[e.cat] = (out.byCat[e.cat] || 0) + k;
+      const cat = expCat(t, e);
+      out.byCat[cat] = (out.byCat[cat] || 0) + k;
       out.byDate[e.date || ''] = (out.byDate[e.date || ''] || 0) + k;
     });
     return out;
@@ -855,8 +860,8 @@
       const k = krwOf(t, e);
       const li = linkInfo(t, e.itemId);
       return `<li class="exp-row" ${ro() ? '' : `data-act="edit-exp" data-id="${e.id}" role="button" tabindex="0"`}>
-        <div class="ex-main"><div class="ex-title">${esc(e.title || EXP_LABEL[e.cat] || '경비')}</div>
-          <div class="ex-sub">${li ? `<span class="src-tag" data-act="tab" data-tab="${li.tab}" title="${esc(li.kind)} 탭으로">${esc(li.kind)}</span>` : ''}${esc(EXP_LABEL[e.cat] || '기타')} · ${esc(PAY_LABEL[e.pay] || '')}${li ? ` · ${esc(shortText(li.title))}` : ''}${e.memo ? ` · ${esc(e.memo)}` : ''}</div></div>
+        <div class="ex-main"><div class="ex-title">${esc(e.title || EXP_LABEL[expCat(t, e)] || '경비')}</div>
+          <div class="ex-sub">${li ? `<span class="src-tag" data-act="tab" data-tab="${li.tab}" title="${esc(li.kind)} 탭으로">${esc(li.kind)}</span>` : ''}${esc(EXP_LABEL[expCat(t, e)] || '기타')} · ${esc(PAY_LABEL[e.pay] || '')}${li ? ` · ${esc(shortText(li.title))}` : ''}${e.memo ? ` · ${esc(e.memo)}` : ''}</div></div>
         <div class="ex-amt"><div class="num">${esc(fmtMoney(e.amount, e.currency))}</div>
           ${e.currency !== 'KRW' ? `<div class="ex-krw num ${k == null ? 'miss' : ''}">${k == null ? '환율 없음' : `${fmtNum(k)}원${e.krw != null ? ' · 실결제' : ''}`}</div>` : ''}</div>
       </li>`;
@@ -1210,7 +1215,8 @@
         <label class="field"><span>통화</span><select id="x-cur">${curOpts.map(c => `<option value="${c}" ${c === e.currency ? 'selected' : ''}>${c} · ${CUR[c][0]}</option>`).join('')}</select></label>
       </div>
       <div class="krw-preview" id="x-prev"></div>
-      <div class="field"><span>분류</span><div class="type-pick">${EXP_CATS.map(([id, l]) => `<label><input type="radio" name="x-cat" value="${id}" ${e.cat === id ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></div>
+      <div class="field"><span>분류</span><div class="type-pick" id="x-cats">${EXP_CATS.map(([id, l]) => `<label><input type="radio" name="x-cat" value="${id}" ${expCat(t, e) === id ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
+        <div class="note-small" id="x-cat-note" hidden>준비 탭 항목에 연결된 비용은 그 항목의 분류를 따라요.</div></div>
       <div class="grid2">
         <label class="field"><span>날짜</span><select id="x-date">${dateOpts.map(([v, l]) => `<option value="${v}" ${v === (e.date || '') ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
         <label class="field"><span>결제</span><select id="x-pay">${PAYS.map(([v, l]) => `<option value="${v}" ${v === e.pay ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
@@ -1240,16 +1246,23 @@
           else if (c !== 'KRW' && amt) msg = rateOf(t, c) ? `≈ <b>${fmtNum(Math.round(amt * rateOf(t, c)))}원</b> <span>(${esc(rateLabel(t, c))})</span>` : `${esc(curUnit(c))} 환율이 아직 없어요. 저장하면 자동으로 불러와 볼게요.`;
           $('#x-prev', root).innerHTML = msg;
         };
-        fillItems(); upd();
+        // 준비 항목에 연결되면 분류를 그 항목 분류로 고정해요
+        const lockCat = () => {
+          const c = prepOf(t, $('#x-item', root).value);
+          root.querySelectorAll('input[name=x-cat]').forEach(r => { r.disabled = !!c; if (c && r.value === PREP_EXP[prepCat(c)]) r.checked = true; });
+          $('#x-cat-note', root).hidden = !c;
+        };
+        fillItems(); upd(); lockCat();
         root.addEventListener('input', upd);
         $('#x-cur', root).addEventListener('change', upd);
-        $('#x-date', root).addEventListener('change', fillItems);
+        $('#x-date', root).addEventListener('change', () => { fillItems(); lockCat(); });
         $('#x-item', root).addEventListener('change', () => {
           const id = $('#x-item', root).value;
           const it = (t.items || []).find(i => i.id === id);
           const cat = it ? (TYPE_TO_EXP[it.type] || 'etc') : (t.flights || []).some(f => f.id === id) ? 'flight' : (t.stays || []).some(s => s.id === id) ? 'stay' : (t.checklist || []).some(c => c.id === id) ? 'prep' : '';
           if (id && !val(root, 'x-title')) $('#x-title', root).value = shortText(linkTitle(t, id));
           if (cat && isNew) { const r = root.querySelector(`input[name=x-cat][value="${cat}"]`); if (r) r.checked = true; }
+          lockCat();
         });
         $('#x-del', root)?.addEventListener('click', () => { t.expenses = t.expenses.filter(x => x.id !== e.id); save(); close(); render(); toast('경비를 삭제했어요'); });
         $('#sheet-form', root).addEventListener('submit', ev => {
@@ -1259,7 +1272,7 @@
           const currency = $('#x-cur', root).value;
           const krwRaw = val(root, 'x-krw'), krw = parseAmount(krwRaw);
           if (currency !== 'KRW' && krwRaw && !Number.isFinite(krw)) { $('#x-err', root).textContent = '실제 원화 결제액은 숫자로 넣어 주세요.'; return; }
-          const cat = (root.querySelector('input[name=x-cat]:checked') || {}).value || 'etc';
+          const cat = prepOf(t, $('#x-item', root).value) ? 'prep' : (root.querySelector('input[name=x-cat]:checked') || {}).value || 'etc'; // 준비 항목 비용은 저장값을 그대로 'prep'
           const data = { title: val(root, 'x-title'), amount, currency, cat, date: $('#x-date', root).value, pay: $('#x-pay', root).value, itemId: $('#x-item', root).value, krw: currency !== 'KRW' && krwRaw ? Math.round(krw) : null, memo: val(root, 'x-memo') };
           if (isNew) t.expenses.push({ id: uid(), ...data }); else Object.assign(e, data);
           ui.lastCur = currency;
@@ -2042,7 +2055,7 @@
         ${usedR.length ? `<div style="color:#5B6472;margin-bottom:6px">환율: ${usedR.map(c => esc(rateLabel(t, c))).join(' · ')}</div>` : ''}
         ${m.missing.size ? `<div style="color:#B8460E;margin-bottom:6px">환율이 없어 합계에서 빠진 통화: ${[...m.missing].map(curUnit).join(', ')}</div>` : ''}
         <table><thead><tr><th>날짜</th><th>내용</th><th>분류</th><th>결제</th><th style="text-align:right">금액</th><th style="text-align:right">원화</th></tr></thead><tbody>
-        ${sorted.map(e => { const k = krwOf(t, e); return `<tr><td>${label(e.date)}</td><td>${esc(e.title || EXP_LABEL[e.cat])}</td><td>${EXP_LABEL[e.cat] || ''}</td><td>${PAY_LABEL[e.pay] || ''}</td><td style="text-align:right">${esc(fmtMoney(e.amount, e.currency))}</td><td style="text-align:right">${k == null ? '-' : fmtNum(k) + '원'}${e.krw != null ? ' *' : ''}</td></tr>`; }).join('')}
+        ${sorted.map(e => { const k = krwOf(t, e); return `<tr><td>${label(e.date)}</td><td>${esc(e.title || EXP_LABEL[expCat(t, e)])}</td><td>${EXP_LABEL[expCat(t, e)] || ''}</td><td>${PAY_LABEL[e.pay] || ''}</td><td style="text-align:right">${esc(fmtMoney(e.amount, e.currency))}</td><td style="text-align:right">${k == null ? '-' : fmtNum(k) + '원'}${e.krw != null ? ' *' : ''}</td></tr>`; }).join('')}
         </tbody></table>${t.expenses.some(e => e.krw != null) ? '<div style="color:#5B6472;margin-top:4px">* 실제 원화 결제액</div>' : ''}`;
     }
     h += `<div class="r-foot">여행일정 · ${todayStr()} 생성 · 터미널과 발권 카운터는 출발 당일 공항·항공사 안내로 다시 확인하세요.</div>`;
