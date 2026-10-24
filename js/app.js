@@ -223,8 +223,11 @@
   let selItem = null; // 순서를 옮기려고 체크한 일정 id
   let sharedTrip = null; // 공유 링크로 받아서 아직 저장하지 않은 여행
   let sharedLink = '';
-  const ro = () => ui.view === 'shared'; // 보기 전용 화면인지
-  const curTrip = () => ro() ? sharedTrip : state.trips.find(t => t.id === ui.tripId);
+  const shared = () => ui.view === 'shared'; // 공유 링크로 받은 여행을 보는 중인지
+  // 가족 공유 여행인데 나에게 수정 권한이 없으면 잠가요 (권한은 가족 공간을 만든 사람이 줘요)
+  const locked = t => !!(t && t.cloud && window.TPCloud && window.TPCloud.canEdit(t.cloud.fam) === false);
+  const ro = () => shared() || (ui.view === 'trip' && locked(state.trips.find(t => t.id === ui.tripId))); // 보기 전용인지
+  const curTrip = () => shared() ? sharedTrip : state.trips.find(t => t.id === ui.tripId);
   const standalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 
   // ───────── 기본 체크리스트 ─────────
@@ -398,7 +401,7 @@
 
   function render() {
     const trip = curTrip();
-    if (ro() && trip) { renderTrip(trip); return; }
+    if (shared() && trip) { renderTrip(trip); return; }
     if (ui.view === 'trip' && trip) renderTrip(trip); else { ui.view = 'home'; renderHome(); }
     saveUI();
   }
@@ -447,7 +450,7 @@
           ${(t.expenses || []).length ? `<span>경비 <span class="num">${fmtNum(expTotals(t).total)}원</span></span>` : ''}
         </div>
       </button>
-      <button class="btn sm ghost del-trip" data-act="del-trip" data-id="${t.id}" aria-label="${esc(tripName(t))} 삭제">${ICON.trash}</button>
+      ${locked(t) ? '' : `<button class="btn sm ghost del-trip" data-act="del-trip" data-id="${t.id}" aria-label="${esc(tripName(t))} 삭제">${ICON.trash}</button>`}
       </div>`;
   }
 
@@ -458,23 +461,23 @@
     app.innerHTML = `
       <div class="wrap">
         <header class="topbar">
-          <button class="btn icon ghost" data-act="${ro() ? 'close-shared' : 'home'}" aria-label="${ro() ? '닫기' : '여행 목록'}">${ICON.back}</button>
+          <button class="btn icon ghost" data-act="${shared() ? 'close-shared' : 'home'}" aria-label="${shared() ? '닫기' : '여행 목록'}">${ICON.back}</button>
           <div class="grow"></div>
           <button class="btn sm" data-act="pdf">${ICON.doc}PDF</button>
-          ${ro()
+          ${shared()
             ? `<button class="btn primary sm" data-act="save-shared">${ICON.save}내 앱에 저장</button>`
-            : `<button class="btn sm" data-act="share">${ICON.share}공유</button><button class="btn sm" data-act="edit-trip">${ICON.edit}여행 정보</button>`}
+            : `<button class="btn sm" data-act="share">${ICON.share}공유</button>${ro() ? '' : `<button class="btn sm" data-act="edit-trip">${ICON.edit}여행 정보</button>`}`}
         </header>
         <section class="trip-head">
           <div>
             <div class="crumb">${esc(t.year || '')} · ${esc(t.country || '나라 미정')}${t.example ? '<span class="example-badge">예시</span>' : ''}</div>
             <h1>${esc(t.city || '여행지 미정')}</h1>
             <div class="dates"><span class="num">${fmtD(t.startDate)} – ${fmtD(t.endDate)}</span> · ${nightsLabel(t)}${t.subtitle ? ' · ' + esc(t.subtitle) : ''}</div>
-            ${t.cloud && !ro() ? `<div class="sync-line ${syncInfo(t).cls}" data-act="family" role="button" tabindex="0">${ICON.cloud}${esc(syncInfo(t).text)}</div>` : ''}
+            ${t.cloud && !shared() ? `<div class="sync-line ${syncInfo(t).cls}" data-act="family" role="button" tabindex="0">${ICON.cloud}${esc(syncInfo(t).text)}</div>` : ''}
           </div>
           <span class="dchip ${dd.cls}">${dd.text}</span>
         </section>
-        ${ro() ? `<div class="shared-banner">
+        ${shared() ? `<div class="shared-banner">
           <b>공유받은 일정 · 보기 전용${t.shareMeta && t.shareMeta.at ? ` · ${fmtD(t.shareMeta.at)}에 보냄` : ''}</b>
           <span>보낸 사람이 일정을 바꾸면 새 링크를 다시 받아야 해요.${standalone() ? '' : ' 홈 화면의 여행일정 앱에 넣으려면 링크를 복사한 뒤, 앱의 <b>불러오기</b>에 붙여넣으세요.'}</span>
           ${standalone() || !sharedLink ? '' : `<button class="btn sm" data-act="copy-shared">링크 복사</button>`}
@@ -1524,6 +1527,7 @@
     if (!navigator.onLine) return { text: '인터넷 없음 · 연결되면 가족과 맞춰져요', cls: 'warn' };
     if (c.syncing || (t.cloud && t.cloud.dirty)) return { text: '가족과 맞추는 중…', cls: '' };
     const by = t.cloud && t.cloud.by && t.cloud.by !== c.email ? ` · 마지막 수정 ${shortName(t.cloud.by)}` : '';
+    if (locked(t)) return { text: '보기 전용 · 수정은 권한을 받은 가족만 할 수 있어요' + by, cls: '' };
     return { text: '가족과 함께 쓰는 중 · 저장됨' + by, cls: 'ok' };
   }
 
@@ -1539,8 +1543,11 @@
     const a = document.activeElement;
     return !!sheetClose || !!(a && app.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));
   }
+  let needRender = false; // 창이 열려 있어서 미룬 다시 그리기 (로그인·권한이 바뀐 경우)
   function flushRemote() {
+    if (!busy() && needRender && !pendingRemote.updates.size && !pendingRemote.removed.size) { needRender = false; render(); return; }
     if (busy() || (!pendingRemote.updates.size && !pendingRemote.removed.size)) return;
+    needRender = false;
     let goneCurrent = false;
     pendingRemote.updates.forEach(t => {
       const i = state.trips.findIndex(x => x.id === t.id);
@@ -1606,8 +1613,13 @@
             body.innerHTML = `${top}${msg}
               <div class="fam-me">로그인: <b>${esc(c.email)}</b></div>
               <div class="fam-title">${ICON.users}<b>${esc(fam.name || '우리 가족')}</b><span>함께 쓰는 여행 ${shared}개</span></div>
-              <ul class="fam-list">${(fam.members || []).map(m => `<li><span>${esc(m)}</span>${m === c.email ? '<em>나</em>' : ''}${m === fam.ownerEmail ? '<em>만든 사람</em>' : ''}
-                ${c.isOwner && m !== c.email ? `<button type="button" class="btn sm ghost" data-rm="${esc(m)}">빼기</button>` : ''}</li>`).join('')}</ul>
+              <ul class="fam-list">${(fam.members || []).map(m => {
+                const owner = m === fam.ownerEmail, ed = owner || (fam.editors || []).includes(m);
+                return `<li><span>${esc(m)}</span>${m === c.email ? '<em>나</em>' : ''}${owner ? '<em>만든 사람</em>' : ''}
+                ${c.isOwner && !owner ? `<button type="button" class="btn sm perm-btn ${ed ? 'on' : ''}" data-perm="${esc(m)}" data-on="${ed ? '' : '1'}" aria-pressed="${ed}">${ed ? '수정 가능' : '보기만'}</button>` : !owner ? `<em class="${ed ? '' : 'ro'}">${ed ? '수정 가능' : '보기만'}</em>` : ''}
+                ${c.isOwner && m !== c.email ? `<button type="button" class="btn sm ghost" data-rm="${esc(m)}">빼기</button>` : ''}</li>`;
+              }).join('')}</ul>
+              <p class="note-small" style="margin:0">여행을 고치고 지우는 건 <b>만든 사람</b>과 <b>수정 가능</b>인 가족만 할 수 있어요. 나머지는 보기만 해요.${c.isOwner ? ' 이름 옆 버튼을 누르면 바뀌어요.' : ''}</p>
               ${c.isOwner ? `<div class="fam-row"><input type="email" id="fam-add" placeholder="가족 구글 이메일" autocomplete="off" autocapitalize="none" aria-label="추가할 가족 이메일"><button type="button" class="btn primary" id="fam-add-btn">추가</button></div>
                 <p class="note-small" style="margin:0">추가한 가족이 앱에서 그 구글 계정으로 로그인하면 바로 함께 쓸 수 있어요.</p>`
                 : '<p class="note-small" style="margin:0">가족 추가·빼기는 가족 공간을 만든 사람만 할 수 있어요.</p>'}
@@ -1629,7 +1641,8 @@
             else if (b.id === 'fam-add-btn') {
               const e = val(root, 'fam-add');
               try { await c.addMember(e); toast(`${e.toLowerCase()} 추가했어요`); } catch (err) { toast(err.message === 'email' ? '이메일 주소를 확인해 주세요' : c.error || '추가하지 못했어요'); }
-            } else if (b.dataset.rm) { await c.removeMember(b.dataset.rm); toast('가족에서 뺐어요'); }
+            } else if (b.dataset.perm) { b.disabled = true; await c.setEditor(b.dataset.perm, !!b.dataset.on); toast(b.dataset.on ? '수정 권한을 줬어요' : '보기만 하도록 바꿨어요'); }
+            else if (b.dataset.rm) { await c.removeMember(b.dataset.rm); toast('가족에서 뺐어요'); }
             else if (b.id === 'fam-retry') { c.load().catch(() => {}); }
           } catch (err) { /* 오류 문구는 c.error로 보여 줘요 */ }
           if (sheetRefresh) sheetRefresh();
@@ -1646,8 +1659,9 @@
     cloudChanged: () => {
       if (sheetRefresh) sheetRefresh();
       // 로그인 상태가 바뀌면 화면 전체를, 저장 중 표시만 바뀌면 그 줄만 다시 그려요 (누르던 버튼이 사라지지 않게)
-      const st = C().state;
-      if (st !== lastCloudState) { lastCloudState = st; if (!busy()) render(); return; }
+      const st = C().state, fam = C().family;
+      const sig = st + (fam ? '|' + C().canEdit(fam.id) : '');
+      if (sig !== lastCloudState) { lastCloudState = sig; if (!busy()) render(); else needRender = true; return; }
       const fb = app.querySelector('.fam-btn'); if (fb) fb.className = `btn icon sm fam-btn ${famDot()}`;
       const line = app.querySelector('.sync-line'), t = curTrip();
       if (line && t && t.cloud) { const si = syncInfo(t); line.className = `sync-line ${si.cls}`; line.innerHTML = `${ICON.cloud}${esc(si.text)}`; }
@@ -1846,7 +1860,10 @@
             fs.innerHTML = `<div class="fam-on">${ICON.cloud}<b>가족과 함께 쓰는 중</b></div>
               <p class="note-small" style="margin:0">가족 모두 이 여행을 실시간으로 보고 고칠 수 있어요. 아래 링크는 <b>가족으로 등록된 사람만</b> 열려요.</p>
               <div class="fam-row"><input type="text" id="f-link" readonly value="${esc(famLink())}" aria-label="가족 링크"><button type="button" class="btn" id="f-copy">복사</button></div>
-              <div class="fam-row"><button type="button" class="btn primary" id="f-send">${ICON.share}카톡으로 가족에게 보내기</button><button type="button" class="btn sm ghost" id="f-off">함께 쓰기 끄기</button></div>`;
+              <div class="fam-row"><button type="button" class="btn primary" id="f-send">${ICON.share}카톡으로 가족에게 보내기</button>${locked(t) ? '' : '<button type="button" class="btn sm ghost" id="f-off">함께 쓰기 끄기</button>'}</div>
+              ${locked(t) ? '<p class="note-small" style="margin:0">이 여행은 <b>보기 전용</b>이에요. 고치려면 가족 공간을 만든 사람에게 수정 권한을 받으세요.</p>' : ''}`;
+          } else if (c.state === 'ready' && c.canEdit(c.family.id) === false) {
+            fs.innerHTML = `<p class="note-small" style="margin:0">가족 공간에 여행을 올리려면 가족 공간을 만든 사람에게 <b>수정 권한</b>을 받아야 해요.</p>`;
           } else if (c.state === 'ready') {
             fs.innerHTML = `<p class="fam-lead">이 여행을 <b>${esc(c.family.name || '우리 가족')}</b>과 함께 쓸까요? 가족 모두 실시간으로 보고 고칠 수 있고, 짧은 링크로 보낼 수 있어요.</p>
               <button type="button" class="btn primary" id="f-up">${ICON.users}가족과 함께 쓰기</button>`;
@@ -2052,7 +2069,8 @@
     if (e.target.closest('[data-stop]')) return;
     const el = e.target.closest('[data-act]'); if (!el) return;
     const act = el.dataset.act, id = el.dataset.id, t = curTrip();
-    if (ro() && ['family', 'del-trip', 'move-sel', 'sel-done', 'move-day', 'del-item', 'add-exp-check', 'add-stay', 'edit-stay', 'edit-trip', 'add-item', 'edit-item', 'day-title', 'add-flight', 'edit-flight', 'edit-check', 'del-check', 'share', 'add-exp', 'edit-exp', 'edit-rate', 'fetch-rates'].includes(act)) return;
+    if (shared() && (act === 'family' || act === 'share')) return;
+    if (ro() && ['del-trip', 'move-sel', 'sel-done', 'move-day', 'del-item', 'add-exp-check', 'add-stay', 'edit-stay', 'edit-trip', 'add-item', 'edit-item', 'day-title', 'add-flight', 'edit-flight', 'edit-check', 'del-check', 'add-exp', 'edit-exp', 'edit-rate', 'fetch-rates'].includes(act)) return;
     switch (act) {
       case 'add-exp': expSheet(t, null); break;
       case 'sel-item': selItem = selItem === id ? null : id; render(); break;
@@ -2073,7 +2091,7 @@
         break;
       }
       case 'del-trip': {
-        const tr = state.trips.find(x => x.id === id); if (!tr) break;
+        const tr = state.trips.find(x => x.id === id); if (!tr || locked(tr)) break;
         if (!el.classList.contains('armed')) {
           app.querySelectorAll('.del-trip.armed').forEach(b => { b.classList.remove('armed'); b.innerHTML = ICON.trash; });
           el.classList.add('armed'); el.innerHTML = `${ICON.trash}삭제`;
