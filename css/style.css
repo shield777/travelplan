@@ -173,6 +173,9 @@ body::before {
 .shared-banner > b { color: var(--accent); }
 .sep { border: 0; border-top: 1px solid var(--line); width: 100%; margin: 4px 0; }
 
+.example-note { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 12px; padding: 10px 12px; border-radius: var(--r-sm); background: var(--warn-soft); font-size: 13px; }
+.example-note span { flex: 1; min-width: 0; }
+.btn.danger.armed, .btn.armed { background: var(--warn); border-color: var(--warn); color: var(--surface); }
 .empty {
   border: 1px dashed var(--line); border-radius: var(--r); padding: 20px; text-align: center; color: var(--muted); background: var(--surface);
 }
