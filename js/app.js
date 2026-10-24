@@ -40,6 +40,8 @@
   const PREP_CATS = ['투어예약', '사전준비', '기타'];
   // 예전 분류(서류·예약·돈…)는 '사전준비'로 보여 줘요. 데이터는 바꾸지 않아요
   const prepCat = c => PREP_CATS.includes(c.cat) ? c.cat : (!c.cat ? '기타' : '사전준비');
+  // 준비 탭 투어예약 항목은 일정 하나(c.tour = 일정 id)에 연결할 수 있어요. 비용은 경비에 한 번만 들어가고 일정 카드에는 표시만 해요
+  const bookingsOf = (t, itemId) => (t.checklist || []).filter(c => c.tour && c.tour === itemId && prepCat(c) === '투어예약');
   const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
   // 통화: [한글 단위, 소수 자릿수]
   const CUR = {
@@ -593,6 +595,15 @@
     if (ta) t.dayTitles[b] = ta; else delete t.dayTitles[b];
   }
 
+  // 준비 탭 투어예약에 연결된 비용 (표시만, 경비는 준비 탭 쪽에 한 번만 들어가 있어요)
+  function bookingLine(t, itemId) {
+    const bk = bookingsOf(t, itemId); if (!bk.length) return '';
+    const ids = new Set(bk.map(c => c.id));
+    const ex = (t.expenses || []).filter(e => ids.has(e.itemId));
+    const krw = ex.reduce((a, e) => a + (krwOf(t, e) || 0), 0);
+    const done = bk.every(c => c.done);
+    return `<div class="tl-booked"><span class="bk-tag">투어예약${done ? ' ✓' : ''}</span>${ex.length ? `<span class="num">${fmtNum(krw)}원</span>` : '<span>비용 없음</span>'}</div>`;
+  }
   function itemRow(i, showDate, money, t, move) {
     const map = i.place ? placeMap(t, i.place) : null;
     const sp = money && money.byItem[i.id];
@@ -609,6 +620,7 @@
           ${i.memo ? `<div class="tl-memo">${esc(i.memo)}</div>` : ''}
           ${i.cost ? `<div class="tl-cost">${esc(i.cost)}</div>` : ''}
           ${sp ? `<div class="tl-spent num">${fmtNum(sp.krw)}원${foreign ? ` <small>(${esc(foreign)})</small>` : ''}</div>` : ''}
+          ${bookingLine(t, i.id)}
           ${ro() ? '' : `<div class="card-acts"><button class="btn sm ghost del-item" data-act="del-item" data-id="${i.id}" aria-label="${esc(i.title)} 삭제">${ICON.trash}</button></div>`}
         </div>
       </li>`;
@@ -924,8 +936,23 @@
         <select id="new-check-cat" aria-label="분류">${PREP_CATS.map(c => `<option ${c === (ui.lastPrepCat || '사전준비') ? 'selected' : ''}>${c}</option>`).join('')}</select>
         <div class="won-input"><input type="text" id="new-check-cost" inputmode="numeric" placeholder="비용 (선택)" aria-label="비용" autocomplete="off"><span>원</span></div>
         <button class="btn primary" type="submit">${ICON.plus}추가</button>
+        <select id="new-check-tour" class="add-tour" aria-label="연결할 일정" ${(ui.lastPrepCat || '사전준비') === '투어예약' && (t.items || []).length ? '' : 'hidden'}>${tourOptions(t, '')}</select>
       </form>
 `}`;
+  }
+  function tourLabel(t, c) {
+    if (!c.tour || prepCat(c) !== '투어예약') return '';
+    const i = (t.items || []).find(x => x.id === c.tour); if (!i) return '';
+    const d = tripDays(t).indexOf(i.date);
+    return `${d >= 0 ? `${d + 1}일차 ` : ''}${i.title}`;
+  }
+  function tourOptions(t, sel) {
+    const days = tripDays(t);
+    const items = [...(t.items || [])].sort((a, b) => ((a.date || '') + (a.time || '99')).localeCompare((b.date || '') + (b.time || '99')));
+    return `<option value="">일정 연결 안 함</option>` + items.map(i => {
+      const d = days.indexOf(i.date);
+      return `<option value="${esc(i.id)}" ${i.id === sel ? 'selected' : ''}>${d >= 0 ? `${d + 1}일차 ` : ''}${esc(i.time || '')} ${esc(i.title)}</option>`;
+    }).join('');
   }
   function checkRow(t, c) {
     const costs = (t.expenses || []).filter(e => e.itemId === c.id);
@@ -936,6 +963,7 @@
         <div class="txt" ${ro() ? '' : `data-act="edit-check" data-id="${c.id}" role="button" tabindex="0"`}>
           <div class="t">${esc(c.text)}</div>
           ${c.memo ? `<div class="memo">${esc(c.memo)}</div>` : ''}
+          ${tourLabel(t, c) ? `<div class="check-tour">${ICON.sight}${esc(tourLabel(t, c))}</div>` : ''}
           ${costs.length ? `<div class="check-cost num">${fmtNum(krw)}원${costs.some(e => e.currency !== 'KRW') ? ` <small>(${esc(costs.map(e => fmtMoney(e.amount, e.currency)).join(' + '))})</small>` : ''}</div>` : ''}
         </div>
         ${ro() ? '' : `<div class="check-acts"><button class="btn sm ghost add-cost" data-act="add-exp-check" data-id="${c.id}" aria-label="${esc(c.text)} 비용 추가">${ICON.plus}비용</button><button class="btn icon ghost sm del" data-act="del-check" data-id="${c.id}" aria-label="삭제">${ICON.trash}</button></div>`}
@@ -1057,11 +1085,13 @@
       <label class="field"><span>메모</span><textarea id="f-memo">${esc(item.memo)}</textarea></label>
       ${item.cost ? `<label class="field"><span>비용 메모 <span class="hint">(이전 방식 · 합계에는 안 들어가요)</span></span><input type="text" id="f-cost" value="${esc(item.cost)}"></label>` : ''}
       ${itemCostHtml(t, isNew ? '' : item.id)}
+      ${!isNew && bookingsOf(t, item.id).length ? `<div class="note-small">준비 탭 <b>투어예약</b>에 연결된 비용도 이 일정 카드에 보여요. 그 비용은 준비 탭에서 고치세요 (경비 합계에는 한 번만 들어가요).</div>` : ''}
       <div class="ap-preview" id="f-err" style="color:var(--warn)"></div>`,
       `${isNew ? '' : `<button type="button" class="btn danger left" id="f-del">${ICON.trash}삭제</button>`}<button type="button" class="btn" data-close="1">취소</button><button type="submit" class="btn primary">저장</button>`,
       (root, close) => {
         $('#f-del', root)?.addEventListener('click', () => {
           t.items = t.items.filter(x => x.id !== item.id);
+          (t.checklist || []).forEach(c => { if (c.tour === item.id) delete c.tour; });
           (t.expenses || []).forEach(e => { if (e.itemId === item.id) e.itemId = ''; }); // 경비는 남기고 연결만 풀기
           save(); close(); render(); toast('일정을 삭제했어요');
         });
@@ -1451,11 +1481,14 @@
     openSheet('할 일 수정', `
       <label class="field"><span>할 일</span><input type="text" id="f-text" value="${esc(c.text)}"></label>
       <div class="field"><span>분류</span><div class="type-pick">${PREP_CATS.map(x => `<label><input type="radio" name="f-pcat" value="${x}" ${x === prepCat(c) ? 'checked' : ''}><span>${x}</span></label>`).join('')}</div></div>
+      <label class="field" id="f-tour-wrap" ${prepCat(c) === '투어예약' ? '' : 'hidden'}><span>연결할 일정 <span class="hint">(선택) 고르면 그 일정 카드에도 이 비용이 보여요 · 경비 합계에는 한 번만</span></span>
+        <select id="f-tour">${tourOptions(t, c.tour || '')}</select></label>
       ${sheetCostHtml(t, c.id, '비용', '넣으면 경비 탭에 함께 들어가요')}
       <label class="field"><span>메모</span><textarea id="f-memo">${esc(c.memo || '')}</textarea></label>
       <div class="ap-preview" id="f-err" style="color:var(--warn)"></div>`,
       `<button type="button" class="btn" data-close="1">취소</button><button type="submit" class="btn primary">저장</button>`,
       (root, close) => {
+        root.querySelectorAll('input[name=f-pcat]').forEach(r => r.addEventListener('change', () => { $('#f-tour-wrap', root).hidden = r.value !== '투어예약' || !r.checked; }));
         $('#sheet-form', root).addEventListener('submit', e => {
           e.preventDefault();
           const text = val(root, 'f-text'); if (!text) { $('#f-err', root).textContent = '할 일을 적어 주세요.'; return; }
@@ -1463,6 +1496,8 @@
           const pcat = (root.querySelector('input[name=f-pcat]:checked') || {}).value || prepCat(c);
           Object.assign(c, { text, memo: val(root, 'f-memo') });
           if (pcat !== prepCat(c)) c.cat = pcat; // 분류를 바꿨을 때만 저장 (예전 분류는 그대로 둠)
+          const tour = pcat === '투어예약' ? val(root, 'f-tour') : '';
+          if (tour) c.tour = tour; else delete c.tour;
           applySheetCost(t, root, c.id, { cat: 'prep', title: shortText(text) });
           save(); close(); render();
         });
@@ -1564,6 +1599,8 @@
     let goneCurrent = false;
     pendingRemote.updates.forEach(t => {
       const i = state.trips.findIndex(x => x.id === t.id);
+      // 창이 열려 있는 동안 기다리던 내용이, 그 사이 이 기기에서 고친 내용(아직 보내는 중)을 덮어쓰면 안 돼요
+      if (i >= 0 && state.trips[i].cloud && state.trips[i].cloud.dirty) return;
       if (i >= 0) state.trips[i] = t; else state.trips.push(t);
     });
     pendingRemote.removed.forEach(id => {
@@ -1704,6 +1741,7 @@
     const short = o => { if (o && o.id) { map[o.id] = (n++).toString(36); o.id = map[o.id]; } };
     ['items', 'stays', 'checklist', 'expenses'].forEach(k => (c[k] || []).forEach(short));
     (c.expenses || []).forEach(e => { if (e.itemId && map[e.itemId]) e.itemId = map[e.itemId]; });
+    (c.checklist || []).forEach(x => { if (x.tour) { if (map[x.tour]) x.tour = map[x.tour]; else delete x.tour; } });
     const strip = v => {
       if (Array.isArray(v)) return v.map(strip);
       if (v && typeof v === 'object') {
@@ -1752,7 +1790,8 @@
   function normalizeTrip(t) {
     t = t && typeof t === 'object' ? t : {};
     const arr = v => Array.isArray(v) ? v.filter(x => x && typeof x === 'object') : [];
-    const sid = v => (typeof v === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(v)) ? v : uid();
+    const validId = v => typeof v === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(v);
+    const sid = v => validId(v) ? v : uid();
     const str = (v, n) => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '').slice(0, n);
     const date = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '';
     const time = v => typeof v === 'string' && /^\d{2}:\d{2}$/.test(v) ? v : '';
@@ -1770,7 +1809,7 @@
         .filter(([c, r]) => has(CUR, c) && c !== 'KRW' && r && Number(r.v) > 0)
         .map(([c, r]) => [c, { v: Number(r.v), date: date(r.date), src: r.src === 'manual' ? 'manual' : 'auto' }])),
       expenses: arr(t.expenses).map(e => ({ id: sid(e.id), date: date(e.date), itemId: typeof e.itemId === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(e.itemId) ? e.itemId : '', title: str(e.title, 120), cat: has(EXP_LABEL, e.cat) ? e.cat : 'etc', amount: Number.isFinite(Number(e.amount)) ? Number(e.amount) : 0, currency: typeof e.currency === 'string' && has(CUR, e.currency) ? e.currency : 'KRW', krw: e.krw === null || e.krw === '' || e.krw === undefined || !Number.isFinite(Number(e.krw)) ? null : Math.round(Number(e.krw)), pay: has(PAY_LABEL, e.pay) ? e.pay : 'etc', memo: str(e.memo, 500) })),
-      checklist: arr(t.checklist).map(c => ({ id: sid(c.id), text: str(c.text, 200), cat: CATS.includes(c.cat) ? c.cat : '기타', due: (c.due === null || c.due === '' || c.due === undefined || !Number.isFinite(Number(c.due))) ? null : Math.max(0, Math.min(365, Math.round(Number(c.due)))), done: !!c.done, memo: str(c.memo, 500) }))
+      checklist: arr(t.checklist).map(c => ({ id: sid(c.id), text: str(c.text, 200), cat: CATS.includes(c.cat) ? c.cat : '기타', due: (c.due === null || c.due === '' || c.due === undefined || !Number.isFinite(Number(c.due))) ? null : Math.max(0, Math.min(365, Math.round(Number(c.due)))), done: !!c.done, memo: str(c.memo, 500), ...(validId(c.tour) ? { tour: c.tour } : {}) }))
     };
     if (date(t.receivedAt)) out.receivedAt = t.receivedAt;
     if (t.shareMeta && typeof t.shareMeta === 'object') out.shareMeta = { pnr: !!t.shareMeta.pnr, check: !!t.shareMeta.check, exp: !!t.shareMeta.exp, at: date(t.shareMeta.at) };
@@ -1799,6 +1838,7 @@
     const remap = {};
     ['items', 'stays', 'checklist', 'expenses'].forEach(k => (t[k] || []).forEach(o => { if (o.id && o.id.length < 8) { remap[o.id] = uid(); o.id = remap[o.id]; } }));
     (t.expenses || []).forEach(e => { if (e.itemId && remap[e.itemId]) e.itemId = remap[e.itemId]; });
+    (t.checklist || []).forEach(c => { if (c.tour && remap[c.tour]) c.tour = remap[c.tour]; });
     const meta = t.shareMeta || {}; delete t.shareMeta;
     const ex = state.trips.find(x => x.id === t.id);
     const doSave = () => {
@@ -2128,6 +2168,7 @@
         }
         clearTimeout(delItemTimer);
         t.items = t.items.filter(x => x.id !== id);
+        (t.checklist || []).forEach(c => { if (c.tour === id) delete c.tour; });
         (t.expenses || []).forEach(e => { if (e.itemId === id) e.itemId = ''; }); // 경비는 남기고 연결만 풀기
         save(); render(); toast('일정을 지웠어요');
         break;
@@ -2177,6 +2218,7 @@
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[role=button][data-act]')) { e.preventDefault(); e.target.click(); }
   });
   app.addEventListener('change', e => {
+    if (e.target.id === 'new-check-cat') { const s = $('#new-check-tour'), t = curTrip(); if (s) s.hidden = !(e.target.value === '투어예약' && t && (t.items || []).length); return; }
     const el = e.target;
     if (el.dataset.act === 'toggle-check' && !ro()) {
       const t = curTrip(); const c = t.checklist.find(x => x.id === el.dataset.id);
@@ -2191,6 +2233,8 @@
     if (costRaw && !cost) { toast('비용은 숫자로 넣어 주세요'); return; }
     const cat = $('#new-check-cat').value; ui.lastPrepCat = cat;
     const c = { id: uid(), text, cat, due: null, done: false, memo: '' };
+    const tour = cat === '투어예약' && $('#new-check-tour') ? $('#new-check-tour').value : '';
+    if (tour) c.tour = tour;
     t.checklist.push(c);
     if (cost) { t.expenses = t.expenses || []; t.expenses.push({ id: uid(), date: '', itemId: c.id, title: shortText(text), cat: 'prep', amount: cost, currency: 'KRW', krw: null, pay: 'card', memo: '' }); }
     save(); render(); toast(cost ? `추가했어요 · 비용 ${fmtNum(cost)}원은 경비 탭에 들어갔어요` : '추가했어요'); $('#new-check-text')?.focus();
