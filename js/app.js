@@ -510,7 +510,10 @@
             <button class="btn icon sm ghost" data-act="move-day" data-date="${d}" data-dir="1" ${i === last ? 'disabled' : ''} aria-label="${i + 1}일차를 뒷날로">${ICON.down}</button>
           </div>`}
         </div>
-        ${entries.length ? `<ul class="timeline">${entries.map(e => e.kind === 'item' ? itemRow(e.i, false, money, t) : e.s ? stayRow(e.s, e.kind) : flightRow(e.f, e.kind === 'arrive')).join('')}</ul>` : ''}
+        ${entries.length ? `<ul class="timeline">${(() => {
+          const ids = entries.filter(e => e.kind === 'item').map(e => e.i.id); // 같은 날 일정끼리만 순서를 바꿔요
+          return entries.map(e => e.kind === 'item' ? itemRow(e.i, false, money, t, { up: ids.indexOf(e.i.id) > 0, down: ids.indexOf(e.i.id) < ids.length - 1 }) : e.s ? stayRow(e.s, e.kind) : flightRow(e.f, e.kind === 'arrive')).join('');
+        })()}</ul>` : ''}
         ${ro() ? (entries.length ? '' : '<div class="note-small" style="padding-top:8px">일정 없음</div>') : `<div class="add-row" ${entries.length ? '' : 'style="padding-left:0"'}>
           <button class="btn sm" data-act="add-item" data-date="${d}">${ICON.plus}일정 추가</button>
         </div>`}
@@ -528,13 +531,17 @@
     if (ta) t.dayTitles[b] = ta; else delete t.dayTitles[b];
   }
 
-  function itemRow(i, showDate, money, t) {
+  function itemRow(i, showDate, money, t, move) {
     const map = i.place ? placeMap(t, i.place) : null;
     const sp = money && money.byItem[i.id];
     const foreign = sp ? Object.entries(sp.cur).filter(([c]) => c !== 'KRW').map(([c, a]) => fmtMoney(a, c)).join(' + ') : '';
     return `
       <li class="tl-item">
-        <div class="tl-time">${esc(i.time || '—')}${i.endTime ? `<small>~${esc(i.endTime)}</small>` : ''}${showDate ? `<small>${fmtD(i.date)}</small>` : ''}</div>
+        <div class="tl-time">${esc(i.time || '—')}${i.endTime ? `<small>~${esc(i.endTime)}</small>` : ''}${showDate ? `<small>${fmtD(i.date)}</small>` : ''}
+          ${move && !ro() && (move.up || move.down) ? `<div class="item-move">
+            <button class="btn icon sm ghost" data-act="move-item" data-id="${i.id}" data-dir="-1" ${move.up ? '' : 'disabled'} aria-label="${esc(i.title)} 위로">${ICON.up}</button>
+            <button class="btn icon sm ghost" data-act="move-item" data-id="${i.id}" data-dir="1" ${move.down ? '' : 'disabled'} aria-label="${esc(i.title)} 아래로">${ICON.down}</button>
+          </div>` : ''}</div>
         <div class="tl-rail"><span class="tl-dot"></span></div>
         <div class="tl-card" ${ro() ? '' : `data-act="edit-item" data-id="${i.id}" role="button" tabindex="0"`}>
           <div class="tl-type">${ICON[i.type] || ICON.etc}${TYPE_LABEL[i.type] || '기타'}</div>
@@ -1714,9 +1721,21 @@
     if (e.target.closest('[data-stop]')) return;
     const el = e.target.closest('[data-act]'); if (!el) return;
     const act = el.dataset.act, id = el.dataset.id, t = curTrip();
-    if (ro() && ['move-day', 'del-item', 'add-exp-check', 'add-stay', 'edit-stay', 'edit-trip', 'add-item', 'edit-item', 'day-title', 'add-flight', 'edit-flight', 'edit-check', 'del-check', 'share', 'add-exp', 'add-exp-item', 'edit-exp', 'edit-rate', 'fetch-rates'].includes(act)) return;
+    if (ro() && ['move-item', 'move-day', 'del-item', 'add-exp-check', 'add-stay', 'edit-stay', 'edit-trip', 'add-item', 'edit-item', 'day-title', 'add-flight', 'edit-flight', 'edit-check', 'del-check', 'share', 'add-exp', 'add-exp-item', 'edit-exp', 'edit-rate', 'fetch-rates'].includes(act)) return;
     switch (act) {
       case 'add-exp': expSheet(t, null); break;
+      case 'move-item': {
+        const it = t.items.find(x => x.id === id); if (!it) break;
+        const same = dayEntries(t, it.date).filter(e => e.kind === 'item').map(e => e.i);
+        const k = same.indexOf(it), other = same[k + Number(el.dataset.dir)];
+        if (!other) break;
+        [it.time, other.time] = [other.time, it.time];
+        [it.endTime, other.endTime] = [other.endTime, it.endTime];
+        const a = t.items.indexOf(it), b = t.items.indexOf(other); // 시간이 없는 일정은 목록 순서로 정렬돼서 자리도 바꿔요
+        [t.items[a], t.items[b]] = [t.items[b], t.items[a]];
+        save(); render(); toast('순서를 바꿨어요 · 두 일정의 시간도 서로 바꿨어요');
+        break;
+      }
       case 'move-day': {
         const days = tripDays(t), i = days.indexOf(el.dataset.date), j = i + Number(el.dataset.dir);
         if (i < 0 || j < 0 || j >= days.length) break;
