@@ -195,9 +195,18 @@
   function load() {
     try {
       const raw = localStorage.getItem(STORE_KEY);
-      if (raw) { const s = JSON.parse(raw); if (s && Array.isArray(s.trips)) return s; }
+      if (raw) { const s = JSON.parse(raw); if (s && Array.isArray(s.trips)) { fixDupIds(s.trips); return s; } }
     } catch (e) { /* 저장소를 못 쓰는 환경 */ }
     return { trips: [sampleTrip()], seeded: true };
+  }
+  // 같은 id의 여행이 둘이면 홈에서 눌러도 한쪽만 열리고 지울 때 둘 다 지워져요.
+  // 가족 공유 여행을 그대로 두고, 나머지에 새 id를 줘요 (내용은 그대로)
+  function fixDupIds(trips) {
+    const seen = new Set();
+    [...trips.filter(t => t && t.cloud), ...trips.filter(t => t && !t.cloud)].forEach(t => {
+      if (seen.has(t.id)) { t.id = uid(); delete t.cloud; }
+      seen.add(t.id);
+    });
   }
   function save() {
     if (window.TPCloud) window.TPCloud.markDirty(state.trips);
@@ -423,6 +432,7 @@
     const total = (t.checklist || []).length, done = (t.checklist || []).filter(c => c.done).length;
     const routes = sortFlights(t.flights || []).map(f => `<span class="route-chip">${esc(f.dep || '?')}→${esc(f.arr || '?')}</span>`).join('');
     return `
+      <div class="trip-wrap">
       <button class="trip-card" data-act="open-trip" data-id="${t.id}">
         <div>
           <div class="crumb">${esc(t.year || '')} · <b>${esc(t.country || '나라 미정')}</b>${t.example ? '<span class="example-badge">예시</span>' : ''}${t.receivedAt ? '<span class="recv-badge">공유받음</span>' : ''}${t.cloud ? '<span class="recv-badge">가족 공유</span>' : ''}</div>
@@ -436,7 +446,9 @@
           ${total ? `<span>준비 <span class="num">${done}/${total}</span> <span class="mini-bar"><i style="width:${Math.round(done / total * 100)}%"></i></span></span>` : ''}
           ${(t.expenses || []).length ? `<span>경비 <span class="num">${fmtNum(expTotals(t).total)}원</span></span>` : ''}
         </div>
-      </button>`;
+      </button>
+      <button class="btn sm ghost del-trip" data-act="del-trip" data-id="${t.id}" aria-label="${esc(tripName(t))} 삭제">${ICON.trash}</button>
+      </div>`;
   }
 
   function renderTrip(t) {
@@ -994,7 +1006,7 @@
             return;
           }
           clearTimeout(armTimer);
-          deleteTrips(x => x.id === t.id); close(); toast('여행을 삭제했어요');
+          deleteTrips(x => x === t); close(); toast('여행을 삭제했어요');
         });
         $('#sheet-form', root).addEventListener('submit', e => {
           e.preventDefault();
@@ -2029,7 +2041,7 @@
   }
 
   // ───────── 이벤트 ─────────
-  let delItemTimer;
+  let delItemTimer, delTripTimer;
   app.addEventListener('click', e => {
     const cp = e.target.closest('[data-copy]');
     if (cp) {
@@ -2040,7 +2052,7 @@
     if (e.target.closest('[data-stop]')) return;
     const el = e.target.closest('[data-act]'); if (!el) return;
     const act = el.dataset.act, id = el.dataset.id, t = curTrip();
-    if (ro() && ['family', 'move-sel', 'sel-done', 'move-day', 'del-item', 'add-exp-check', 'add-stay', 'edit-stay', 'edit-trip', 'add-item', 'edit-item', 'day-title', 'add-flight', 'edit-flight', 'edit-check', 'del-check', 'share', 'add-exp', 'edit-exp', 'edit-rate', 'fetch-rates'].includes(act)) return;
+    if (ro() && ['family', 'del-trip', 'move-sel', 'sel-done', 'move-day', 'del-item', 'add-exp-check', 'add-stay', 'edit-stay', 'edit-trip', 'add-item', 'edit-item', 'day-title', 'add-flight', 'edit-flight', 'edit-check', 'del-check', 'share', 'add-exp', 'edit-exp', 'edit-rate', 'fetch-rates'].includes(act)) return;
     switch (act) {
       case 'add-exp': expSheet(t, null); break;
       case 'sel-item': selItem = selItem === id ? null : id; render(); break;
@@ -2058,6 +2070,20 @@
         swapDays(t, days[i], days[j]); save(); render();
         const target = $('#day-' + days[j]); if (target) target.scrollIntoView({ block: 'start' });
         toast(`${i + 1}일차와 ${j + 1}일차 일정을 바꿨어요`);
+        break;
+      }
+      case 'del-trip': {
+        const tr = state.trips.find(x => x.id === id); if (!tr) break;
+        if (!el.classList.contains('armed')) {
+          app.querySelectorAll('.del-trip.armed').forEach(b => { b.classList.remove('armed'); b.innerHTML = ICON.trash; });
+          el.classList.add('armed'); el.innerHTML = `${ICON.trash}삭제`;
+          toast(tr.cloud ? '가족 모두의 앱에서 지워져요. 한 번 더 누르면 삭제' : '한 번 더 누르면 여행이 지워져요');
+          clearTimeout(delTripTimer);
+          delTripTimer = setTimeout(() => { el.classList.remove('armed'); el.innerHTML = ICON.trash; }, 4000);
+          break;
+        }
+        clearTimeout(delTripTimer);
+        deleteTrips(x => x === tr); toast('여행을 삭제했어요');
         break;
       }
       case 'del-item': {
