@@ -636,9 +636,9 @@
           </div>
         </div>
         <dl class="pass-fields">
-          <div class="pnr"><dt>예약번호</dt><dd>${esc(f.pnr || '-')}</dd></div>
           <div><dt>출발 터미널</dt><dd>${esc(dt.v || '-')}${dt.est ? '<span class="est">추정</span>' : ''}</dd></div>
           <div><dt>발권 카운터</dt><dd>${esc(f.counter || '-')}</dd></div>
+          <div><dt>예약번호</dt><dd>${esc(f.pnr || '-')}</dd></div>
         </dl>
         ${f.memo ? `<div class="fl-memo">${esc(f.memo)}</div>` : ''}
         ${costBox(t, f.id)}
@@ -1249,7 +1249,6 @@
       </div>
       <datalist id="dl-fno">${Object.entries(state.flightMemo || {}).map(([no, m]) => `<option value="${esc(no)}">${esc(m.dep)}→${esc(m.arr)} ${esc(m.depTime)}</option>`).join('')}</datalist>
       <div class="fl-lookup" id="f-look"></div>
-      <label class="field"><span>예약번호</span><input type="text" id="f-pnr" value="${esc(f.pnr)}" autocapitalize="characters"></label>
       <div class="grid2">
         <div class="field"><span>출발 공항</span><input type="text" id="f-dep" value="${esc(apLabel(f.dep, f.depName))}" placeholder="예: 인천" autocomplete="off" data-code="${esc(f.dep)}"><div class="ap-sugg" id="s-dep"></div></div>
         <div class="field"><span>도착 공항</span><input type="text" id="f-arr" value="${esc(apLabel(f.arr, f.arrName))}" placeholder="예: 간사이, 나트랑" autocomplete="off" data-code="${esc(f.arr)}"><div class="ap-sugg" id="s-arr"></div></div>
@@ -1268,6 +1267,7 @@
       </div>
       <div class="grid2">
         <label class="field"><span>발권 카운터</span><input type="text" id="f-counter" value="${esc(f.counter || '')}" placeholder="예: H열 · 당일 확인" autocapitalize="characters"></label>
+        <label class="field"><span>예약번호</span><input type="text" id="f-pnr" value="${esc(f.pnr)}" autocapitalize="characters"></label>
       </div>
       ${sheetCostHtml(t, f.id, '항공권 비용', '왕복 항공권이면 가는 편에만 넣으세요')}
       <label class="field"><span>메모</span><textarea id="f-memo">${esc(f.memo)}</textarea></label>
