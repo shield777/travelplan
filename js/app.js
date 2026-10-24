@@ -1564,6 +1564,8 @@
     let goneCurrent = false;
     pendingRemote.updates.forEach(t => {
       const i = state.trips.findIndex(x => x.id === t.id);
+      // 창이 열려 있는 동안 기다리던 내용이, 그 사이 이 기기에서 고친 내용(아직 보내는 중)을 덮어쓰면 안 돼요
+      if (i >= 0 && state.trips[i].cloud && state.trips[i].cloud.dirty) return;
       if (i >= 0) state.trips[i] = t; else state.trips.push(t);
     });
     pendingRemote.removed.forEach(id => {
