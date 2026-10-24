@@ -1108,12 +1108,17 @@
           const title = val(root, 'f-title');
           if (!title) { $('#f-err', root).textContent = '무엇을 하는지 적어 주세요.'; return; }
           if (val(root, 'c-amt') && !(parseAmount(val(root, 'c-amt')) > 0)) { $('#f-err', root).textContent = '비용은 숫자로 넣어 주세요.'; return; }
-          const before = { date: item.date, title: item.title };
+          const before = { date: item.date, title: item.title, type: item.type };
           const data = { date: val(root, 'f-date'), time: val(root, 'f-time'), endTime: val(root, 'f-end'), type: (root.querySelector('input[name=f-type]:checked') || {}).value || 'etc', title, place: val(root, 'f-place'), memo: val(root, 'f-memo'), cost: val(root, 'f-cost') };
           if (!data.cost) delete data.cost;
           const iid = isNew ? uid() : item.id;
           if (isNew) t.items.push({ id: iid, ...data }); else { if (!data.cost) delete item.cost; Object.assign(item, data); }
           const cur = applyItemCost(t, root, iid, data, before);
+          // 일정 종류(식사·관광…)를 바꾸면, 종류에 맞춰 자동으로 정해졌던 경비 분류도 따라 바꿔요 (경비 탭에서 직접 고른 분류는 그대로)
+          if (!isNew && before.type !== data.type) {
+            const from = TYPE_TO_EXP[before.type] || 'etc', to = TYPE_TO_EXP[data.type] || 'etc';
+            (t.expenses || []).forEach(e => { if (e.itemId === iid && e.cat === from) e.cat = to; });
+          }
           save(); close(); render(); toast('저장했어요');
           if (cur && cur !== 'KRW' && !rateOf(t, cur)) updateRates(t, [cur], true);
         });
