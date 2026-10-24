@@ -11,6 +11,7 @@
   const EMU = /[?&]emu=1\b/.test(location.search) && /^(localhost|127\.0\.0\.1)$/.test(location.hostname); // 개발용 에뮬레이터
   const SDK = ['vendor/firebase/firebase-app-compat.js', 'vendor/firebase/firebase-auth-compat.js', 'vendor/firebase/firebase-firestore-compat.js'];
   const LS_KEY = 'travelplan.cloud';
+  const PERM_KEY = 'travelplan.perm'; // 가족별로 내가 고칠 수 있는지 (인터넷이 없을 때도 알 수 있게 기억)
   const App = () => window.TPApp;
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
@@ -30,6 +31,21 @@
   const setState = (s, err) => { state = s; lastError = err || ''; emit(); };
   const myEmail = () => (user && user.email ? user.email.toLowerCase() : '');
   const remember = on => { try { if (on) localStorage.setItem(LS_KEY, '1'); else localStorage.removeItem(LS_KEY); } catch (e) { /* 무시 */ } };
+  const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+  const perms = (() => { try { return JSON.parse(localStorage.getItem(PERM_KEY)) || {}; } catch (e) { return {}; } })();
+  // 가족을 만든 사람(owner)과, owner가 수정 권한을 준 사람(editors)만 여행을 고치고 지울 수 있어요
+  const famCanEdit = f => !!(f && user && (f.owner === user.uid || (f.editors || []).includes(myEmail())));
+  function canEdit(fam) {
+    if (family && user && family.id === fam) return famCanEdit(family);
+    return has(perms, fam) ? perms[fam] : null; // 모르면 null (막지 않아요)
+  }
+  function rememberPerm() {
+    if (!family) return;
+    const v = famCanEdit(family);
+    if (perms[family.id] === v) return;
+    perms[family.id] = v;
+    try { localStorage.setItem(PERM_KEY, JSON.stringify(perms)); } catch (e) { /* 무시 */ }
+  }
   const wanted = () => { try { return localStorage.getItem(LS_KEY) === '1'; } catch (e) { return false; } };
 
   function loadScript(src) {
@@ -77,6 +93,7 @@
       if (!pick) { family = null; stopTrips(); setState('nofamily'); return; }
       const changed = !family || family.id !== pick.id;
       family = pick;
+      rememberPerm();
       if (changed) startTrips();
       setState('ready');
     }, err => setState('error', explain(err)));
@@ -98,7 +115,7 @@
         if (ownRevs.has(data.rev)) return;      // 내가 보낸 것
         if (timers[id]) return;                 // 이 기기에 아직 안 보낸 수정이 있으면 그걸 먼저 보내요
         const local = (App().getTrips() || []).find(x => x.id === id);
-        if (local && local.cloud && local.cloud.dirty) { push(local, true); return; }
+        if (local && local.cloud && local.cloud.dirty && canEdit(fam) !== false) { push(local, true); return; }
         const t = App().normalizeTrip(data.trip);
         t.id = id; t.cloud = { fam, by: data.updatedBy || '', at: data.updatedAt && data.updatedAt.toMillis ? data.updatedAt.toMillis() : Date.now() };
         lastPushed[id] = canon(t);
@@ -124,6 +141,7 @@
 
   function push(t, now) {
     if (!db || !family || !t.cloud || t.cloud.fam !== family.id) return;
+    if (!famCanEdit(family)) { delete t.cloud.dirty; return; } // 권한이 없으면 보내지 않아요 (가족 공간의 내용이 맞아요)
     const body = canon(t);
     if (lastPushed[t.id] === body && !now) return;
     clearTimeout(timers[t.id]);
@@ -157,6 +175,7 @@
     get email() { return myEmail(); },
     get family() { return family; },
     get isOwner() { return !!(family && user && family.owner === user.uid); },
+    canEdit,
     get syncing() { return pendingWrites > 0 || Object.keys(timers).length > 0; },
     load,
     // app.js의 save()가 저장 직전에 불러요: 바뀐 여행에 '아직 안 보냄' 표시
@@ -191,19 +210,26 @@
       await db.collection('families').doc(family.id).update({ members: window.firebase.firestore.FieldValue.arrayUnion(e) });
     },
     async removeMember(email) {
-      await db.collection('families').doc(family.id).update({ members: window.firebase.firestore.FieldValue.arrayRemove(email) });
+      const FV = window.firebase.firestore.FieldValue;
+      await db.collection('families').doc(family.id).update({ members: FV.arrayRemove(email), editors: FV.arrayRemove(email) });
+    },
+    // 수정·삭제 권한 주기/빼기 (owner만)
+    async setEditor(email, on) {
+      const FV = window.firebase.firestore.FieldValue;
+      await db.collection('families').doc(family.id).update({ editors: on ? FV.arrayUnion(email) : FV.arrayRemove(email) });
     },
 
     // 여행을 가족 공간에 올리기 / 내리기
     upload(t) { t.cloud = { fam: family.id, by: myEmail(), at: Date.now(), dirty: true }; push(t, true); },
     async unshare(t) {
+      if (canEdit(t.cloud && t.cloud.fam) === false) return;
       const fam = t.cloud && t.cloud.fam;
       delete t.cloud;
       if (fam && db) await tripsCol(fam).doc(t.id).delete();
     },
     // 이 기기에서 고친 여행을 보내요 (app.js의 save()가 불러요)
     onLocalSave(trips) { if (state === 'ready') trips.forEach(t => { if (t.cloud) push(t); }); },
-    removeTrip(t) { if (db && t.cloud && family && t.cloud.fam === family.id) tripsCol(family.id).doc(t.id).delete().catch(err => setState('error', explain(err))); },
+    removeTrip(t) { if (canEdit(t.cloud && t.cloud.fam) === false) return; if (db && t.cloud && family && t.cloud.fam === family.id) tripsCol(family.id).doc(t.id).delete().catch(err => setState('error', explain(err))); },
 
     // 개발용: 에뮬레이터에서만 가짜 구글 계정으로 로그인
     async _testSignIn(email) {

@@ -416,6 +416,9 @@ body.has-move-bar #toast { bottom: calc(90px + env(safe-area-inset-bottom, 0px))
 .fam-list li:first-child { border-top: 0; }
 .fam-list li span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .fam-list em { font-style: normal; font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); }
+.fam-list em.ro { background: var(--surface-2); color: var(--muted); }
+.perm-btn { min-height: 30px; padding: 0 10px; font-size: 12px; white-space: nowrap; }
+.perm-btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 700; }
 .fam-share { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--accent); border-radius: var(--r-sm); background: var(--accent-soft); }
 .fam-on { display: flex; align-items: center; gap: 6px; color: var(--accent); }
 .fam-on svg { width: 18px; height: 18px; }
