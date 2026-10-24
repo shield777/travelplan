@@ -79,14 +79,30 @@
   const isDomestic = trip => /한국|대한민국|korea/i.test(trip.country || '');
   const mapUrl = q => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
   const naverUrl = q => `https://map.naver.com/p/search/${encodeURIComponent(q)}`;
+  // 휴대폰 종류에 맞게 지도 앱을 여는 주소
+  // 아이폰: 앱 전용 주소 · 안드로이드: 인텐트 주소(앱이 없으면 플레이스토어로) / 구글맵은 일반 주소(앱으로 열려요) · PC: 웹 지도
+  const UA = navigator.userAgent || '';
+  const OS = /iPad|iPhone|iPod/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ? 'ios' // 아이패드는 맥처럼 보여서 터치로 구분
+    : /Android/i.test(UA) ? 'android' : 'pc';
+  const NAV_APPNAME = location.hostname || 'travelplan';
+  const intentUrl = (path, scheme, pkg) => `intent://${path}#Intent;scheme=${scheme};action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;package=${pkg};end`;
+  function mapLink(app, q) {
+    const e = encodeURIComponent(q), nq = `search?query=${e}&appname=${encodeURIComponent(NAV_APPNAME)}`;
+    if (app === 'google') return OS === 'ios' ? `comgooglemaps://?q=${e}` : mapUrl(q);
+    if (app === 'naver') return OS === 'ios' ? `nmap://${nq}` : OS === 'android' ? intentUrl(nq, 'nmap', 'com.nhn.android.nmap') : naverUrl(q);
+    if (app === 'kakao') return OS === 'ios' ? `kakaomap://search?q=${e}` : OS === 'android' ? intentUrl(`search?q=${e}`, 'kakaomap', 'net.daum.android.map') : `https://map.kakao.com/link/search/${e}`;
+    if (app === 'tmap') return OS === 'ios' ? `tmap://search?name=${e}` : OS === 'android' ? intentUrl(`search?name=${e}`, 'tmap', 'com.skt.tmap.ku') : ''; // 티맵은 웹 지도가 없어요
+    return '';
+  }
+  const appWord = OS === 'pc' ? '' : ' 앱';
+  // 지도 버튼 하나 (웹 주소면 새 창으로)
+  function mapBtn(app, q, label, extra = '') {
+    const href = mapLink(app, q);
+    if (!href) return '';
+    return `<a class="btn sm" href="${esc(href)}"${/^https?:/.test(href) ? ' target="_blank" rel="noopener"' : ''}${extra}>${label}</a>`;
+  }
   // 일정 장소는 국내 여행이면 네이버지도, 해외 여행이면 구글맵으로 열어요
-  // 아이폰 지도 앱을 바로 여는 주소
-  const placeMap = (t, q) => {
-    const e = encodeURIComponent(q);
-    return isDomestic(t)
-      ? { app: `nmap://search?query=${e}&appname=${encodeURIComponent(NAV_APPNAME)}`, label: '네이버지도' }
-      : { app: `comgooglemaps://?q=${e}`, label: '구글맵' };
-  };
+  const placeMap = (t, q) => isDomestic(t) ? { app: mapLink('naver', q), label: '네이버지도' } : { app: mapLink('google', q), label: '구글맵' };
 
   // ── 돈 계산
   const fmtNum = (n, d = 0) => Number(n).toLocaleString('ko-KR', { maximumFractionDigits: d, minimumFractionDigits: 0 });
@@ -569,7 +585,7 @@
         <div class="tl-card" ${ro() ? '' : `data-act="edit-item" data-id="${i.id}" role="button" tabindex="0"`}>
           <div class="tl-type">${ICON[i.type] || ICON.etc}${TYPE_LABEL[i.type] || '기타'}</div>
           <div class="tl-title">${esc(i.title)}</div>
-          ${map ? `<div class="tl-place"><a href="${esc(map.app)}" data-stop="1">${esc(i.place)} ↗</a><span class="map-tag">${map.label} 앱</span></div>` : ''}
+          ${map ? `<div class="tl-place"><a href="${esc(map.app)}" data-stop="1"${/^https?:/.test(map.app) ? ' target="_blank" rel="noopener"' : ''}>${esc(i.place)} ↗</a><span class="map-tag">${map.label}${appWord}</span></div>` : ''}
           ${i.memo ? `<div class="tl-memo">${esc(i.memo)}</div>` : ''}
           ${i.cost ? `<div class="tl-cost">${esc(i.cost)}</div>` : ''}
           ${sp ? `<div class="tl-spent num">${fmtNum(sp.krw)}원${foreign ? ` <small>(${esc(foreign)})</small>` : ''}</div>` : ''}
@@ -655,13 +671,11 @@
   }
 
   // 주차장: 국내 공항은 카카오맵·티맵·네이버 앱으로 바로 열기, 해외는 지도 링크
-  const NAV_APPNAME = location.hostname || 'travelplan';
   function navButtons(q) {
-    const e = encodeURIComponent(q);
     return `<div class="nav-btns">
-      <a class="btn sm" href="kakaomap://search?q=${e}">카카오맵</a>
-      <a class="btn sm" href="tmap://search?name=${e}" data-copy="${esc(q)}">티맵</a>
-      <a class="btn sm" href="nmap://search?query=${e}&amp;appname=${encodeURIComponent(NAV_APPNAME)}">네이버</a>
+      ${mapBtn('kakao', q, '카카오맵')}
+      ${mapBtn('tmap', q, '티맵', ` data-copy="${esc(q)}"`)}
+      ${mapBtn('naver', q, '네이버')}
     </div>`;
   }
   function parkingBlock(f, ap, side, term, isKr) {
@@ -784,7 +798,6 @@
   function stayCard(t, s) {
     const q = s.address || s.name;
     const n = nightsBetween(s);
-    const enc = encodeURIComponent(q);
     return `
       <article class="stay-box" id="st-${s.id}">
         <div class="stay-top">
@@ -799,8 +812,8 @@
           ? `<div class="map-ph">미리보기 화면에서는 지도를 띄울 수 없어요. 실제 앱 주소에서는 여기에 구글맵이 나와요.</div>`
           : `<iframe src="${gmapEmbed(q)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="${esc(s.name)} 위치"></iframe>`}</div>
           <div class="nav-btns stay-nav">
-            <a class="btn sm" href="comgooglemaps://?q=${enc}">구글맵 앱</a>
-            ${isDomestic(t) ? `<a class="btn sm" href="nmap://search?query=${enc}&amp;appname=${encodeURIComponent(NAV_APPNAME)}">네이버지도</a><a class="btn sm" href="kakaomap://search?q=${enc}">카카오맵</a>` : ''}
+            ${mapBtn('google', q, '구글맵' + appWord)}
+            ${isDomestic(t) ? mapBtn('naver', q, '네이버지도') + mapBtn('kakao', q, '카카오맵') : ''}
           </div>` : ''}
         ${s.confirmNo || s.phone || s.memo ? `<dl class="stay-info">
           ${s.confirmNo ? `<div><dt>예약번호</dt><dd class="num">${esc(s.confirmNo)}</dd></div>` : ''}
