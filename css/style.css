@@ -426,11 +426,9 @@ body.has-move-bar #toast { bottom: calc(90px + env(safe-area-inset-bottom, 0px))
 .tl-spent { font-size: 13px; font-weight: 500; color: var(--accent); margin-top: 2px; }
 .tl-spent small { color: var(--muted); font-weight: 400; }
 .card-acts { position: absolute; top: 4px; right: 4px; display: flex; gap: 2px; }
-.add-exp { min-height: 28px; padding: 0 8px; font-size: 12px; color: var(--muted); }
 .del-item { min-height: 28px; min-width: 30px; padding: 0 7px; font-size: 12px; color: var(--muted); }
 .del-item svg { width: 14px; height: 14px; }
 .del-item.armed { background: var(--warn); border-color: var(--warn); color: var(--surface); }
-.add-exp svg { width: 14px; height: 14px; }
 .money-hero { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; display: grid; gap: 4px; margin-bottom: 14px; }
 .money-hero .lbl { font-size: 12px; color: var(--muted); letter-spacing: .06em; font-weight: 600; }
 .money-hero .big { font-family: var(--font-display); font-weight: 700; font-size: 44px; line-height: 1; letter-spacing: .01em; }
@@ -466,7 +464,6 @@ body.has-move-bar #toast { bottom: calc(90px + env(safe-area-inset-bottom, 0px))
 .ex-amt { text-align: right; white-space: nowrap; }
 .ex-amt > .num { font-weight: 500; }
 .ex-krw { font-size: 12px; color: var(--muted); }
-.ex-mini { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; border-bottom: 1px dashed var(--line); }
 .krw-preview { font-size: 14px; min-height: 1.4em; margin-top: -4px; }
 .krw-preview b { color: var(--accent); font-family: var(--font-mono); font-weight: 500; }
 .krw-preview span { color: var(--muted); font-size: 12px; }
