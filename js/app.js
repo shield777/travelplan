@@ -966,7 +966,7 @@
           ${tourLabel(t, c) ? `<div class="check-tour">${ICON.sight}${esc(tourLabel(t, c))}</div>` : ''}
           ${costs.length ? `<div class="check-cost num">${fmtNum(krw)}원${costs.some(e => e.currency !== 'KRW') ? ` <small>(${esc(costs.map(e => fmtMoney(e.amount, e.currency)).join(' + '))})</small>` : ''}</div>` : ''}
         </div>
-        ${ro() ? '' : `<div class="check-acts"><button class="btn sm ghost add-cost" data-act="add-exp-check" data-id="${c.id}" aria-label="${esc(c.text)} 비용 추가">${ICON.plus}비용</button><button class="btn icon ghost sm del" data-act="del-check" data-id="${c.id}" aria-label="삭제">${ICON.trash}</button></div>`}
+        ${ro() ? '' : `<div class="check-acts"><button class="btn sm ghost add-cost" data-act="add-exp-check" data-id="${c.id}" aria-label="${esc(c.text)} 비용 추가">${ICON.plus}비용 추가</button><button class="btn icon ghost sm del" data-act="del-check" data-id="${c.id}" aria-label="삭제">${ICON.trash}</button></div>`}
       </li>`;
   }
 
