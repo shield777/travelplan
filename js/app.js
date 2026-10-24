@@ -495,7 +495,7 @@
           ${i.memo ? `<div class="tl-memo">${esc(i.memo)}</div>` : ''}
           ${i.cost ? `<div class="tl-cost">${esc(i.cost)}</div>` : ''}
           ${sp ? `<div class="tl-spent num">${fmtNum(sp.krw)}원${foreign ? ` <small>(${esc(foreign)})</small>` : ''}</div>` : ''}
-          ${ro() ? '' : `<button class="btn sm ghost add-exp" data-act="add-exp-item" data-id="${i.id}" aria-label="${esc(i.title)} 경비 추가">${ICON.plus}경비</button>`}
+          ${ro() ? '' : `<div class="card-acts"><button class="btn sm ghost add-exp" data-act="add-exp-item" data-id="${i.id}" aria-label="${esc(i.title)} 경비 추가">${ICON.plus}경비</button><button class="btn sm ghost del-item" data-act="del-item" data-id="${i.id}" aria-label="${esc(i.title)} 삭제">${ICON.trash}</button></div>`}
         </div>
       </li>`;
   }
@@ -1602,6 +1602,7 @@
   }
 
   // ───────── 이벤트 ─────────
+  let delItemTimer;
   app.addEventListener('click', e => {
     const cp = e.target.closest('[data-copy]');
     if (cp) {
@@ -1612,9 +1613,24 @@
     if (e.target.closest('[data-stop]')) return;
     const el = e.target.closest('[data-act]'); if (!el) return;
     const act = el.dataset.act, id = el.dataset.id, t = curTrip();
-    if (ro() && ['add-exp-check', 'add-stay', 'edit-stay', 'edit-trip', 'add-item', 'edit-item', 'day-title', 'add-flight', 'edit-flight', 'edit-check', 'del-check', 'load-template', 'share', 'add-exp', 'add-exp-item', 'edit-exp', 'edit-rate', 'fetch-rates'].includes(act)) return;
+    if (ro() && ['del-item', 'add-exp-check', 'add-stay', 'edit-stay', 'edit-trip', 'add-item', 'edit-item', 'day-title', 'add-flight', 'edit-flight', 'edit-check', 'del-check', 'load-template', 'share', 'add-exp', 'add-exp-item', 'edit-exp', 'edit-rate', 'fetch-rates'].includes(act)) return;
     switch (act) {
       case 'add-exp': expSheet(t, null); break;
+      case 'del-item': {
+        if (!el.classList.contains('armed')) {
+          app.querySelectorAll('.del-item.armed').forEach(b => { b.classList.remove('armed'); b.innerHTML = ICON.trash; });
+          el.classList.add('armed'); el.innerHTML = `${ICON.trash}삭제`;
+          toast('한 번 더 누르면 지워져요');
+          clearTimeout(delItemTimer);
+          delItemTimer = setTimeout(() => { el.classList.remove('armed'); el.innerHTML = ICON.trash; }, 4000);
+          break;
+        }
+        clearTimeout(delItemTimer);
+        t.items = t.items.filter(x => x.id !== id);
+        (t.expenses || []).forEach(e => { if (e.itemId === id) e.itemId = ''; }); // 경비는 남기고 연결만 풀기
+        save(); render(); toast('일정을 지웠어요');
+        break;
+      }
       case 'add-stay': staySheet(t, null); break;
       case 'add-exp-check': { const c = t.checklist.find(x => x.id === id); if (c) expSheet(t, null, checkPreset(c)); break; }
       case 'edit-stay': staySheet(t, (t.stays || []).find(x => x.id === id)); break;

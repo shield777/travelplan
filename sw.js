@@ -1,6 +1,6 @@
 /* 오프라인 지원: 항상 네트워크를 먼저 쓰고, 연결이 없을 때만 저장해 둔 사본을 보여 줘요.
    (그래서 앱을 고쳐 올리면 다음 접속 때 바로 새 버전이 보입니다) */
-const CACHE = 'travelplan-v15';
+const CACHE = 'travelplan-v16';
 const SHELL = ['./', 'index.html', 'css/style.css', 'js/airports.js', 'js/app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'vendor/html2pdf.bundle.min.js'];
 
 self.addEventListener('install', e => {

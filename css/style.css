@@ -354,7 +354,11 @@ body::before {
 .tl-card { position: relative; }
 .tl-spent { font-size: 13px; font-weight: 500; color: var(--accent); margin-top: 2px; }
 .tl-spent small { color: var(--muted); font-weight: 400; }
-.add-exp { position: absolute; top: 4px; right: 4px; min-height: 28px; padding: 0 8px; font-size: 12px; color: var(--muted); }
+.card-acts { position: absolute; top: 4px; right: 4px; display: flex; gap: 2px; }
+.add-exp { min-height: 28px; padding: 0 8px; font-size: 12px; color: var(--muted); }
+.del-item { min-height: 28px; min-width: 30px; padding: 0 7px; font-size: 12px; color: var(--muted); }
+.del-item svg { width: 14px; height: 14px; }
+.del-item.armed { background: var(--warn); border-color: var(--warn); color: var(--surface); }
 .add-exp svg { width: 14px; height: 14px; }
 .money-hero { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; display: grid; gap: 4px; margin-bottom: 14px; }
 .money-hero .lbl { font-size: 12px; color: var(--muted); letter-spacing: .06em; font-weight: 600; }
