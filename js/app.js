@@ -36,7 +36,7 @@
     { id: 'stay', label: '숙소' }, { id: 'shop', label: '쇼핑' }, { id: 'etc', label: '기타' }
   ];
   const TYPE_LABEL = Object.fromEntries(TYPES.map(t => [t.id, t.label]));
-  const RESV = { done: '예약 완료', todo: '예약 미완료' }; // 일정의 예약 상태 (선택 안 하면 표시 없음)
+  const RESV = { done: '예약 완료', todo: '예약 필요' }; // 일정의 예약 상태 (선택 안 하면 표시 없음)
   const CATS = ['서류', '예약', '돈', '통신', '짐', '집', '기타', '투어예약', '사전준비']; // 저장된 값 검사용 (예전 분류 포함)
   const PREP_CATS = ['사전준비', '기타'];
   // 예전 분류(서류·예약·돈…)는 '사전준비'로 보여 줘요. 데이터는 바꾸지 않아요
@@ -1097,7 +1097,7 @@
         <label class="field"><span>끝 <span class="hint">(선택)</span></span><input type="time" id="f-end" value="${esc(item.endTime)}"></label>
       </div>
       <div class="field"><span>예약 <span class="hint">(선택) 투어·식당처럼 예약이 필요한 일정</span></span><div class="type-pick resv-pick">
-        ${[['', '선택 안 함'], ['done', '완료'], ['todo', '미완료']].map(([v, l]) => `<label><input type="radio" name="f-resv" value="${v}" ${(item.resv || '') === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></div>
+        ${[['', '선택 안 함'], ['done', '완료'], ['todo', '필요']].map(([v, l]) => `<label><input type="radio" name="f-resv" value="${v}" ${(item.resv || '') === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></div>
       <label class="field"><span>장소 · 주소 <span class="hint">${isDomestic(t) ? '국내 여행이라 네이버지도 앱으로 열려요' : '해외 여행이라 구글맵 앱으로 열려요'}</span></span><input type="text" id="f-place" value="${esc(item.place)}" placeholder="${isDomestic(t) ? '예: 제주 애월읍 애월해안로 272' : '예: Kiyomizu-dera 또는 현지 주소'}"></label>
       <label class="field"><span>메모</span><textarea id="f-memo">${esc(item.memo)}</textarea></label>
       ${item.cost ? `<label class="field"><span>비용 메모 <span class="hint">(이전 방식 · 합계에는 안 들어가요)</span></span><input type="text" id="f-cost" value="${esc(item.cost)}"></label>` : ''}
