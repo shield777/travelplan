@@ -36,7 +36,7 @@
     { id: 'stay', label: '숙소' }, { id: 'shop', label: '쇼핑' }, { id: 'etc', label: '기타' }
   ];
   const TYPE_LABEL = Object.fromEntries(TYPES.map(t => [t.id, t.label]));
-  const RESV = { done: '예약 완료', todo: '예약 필요' }; // 일정의 예약 상태 (선택 안 하면 표시 없음)
+  const RESV = { done: '완료', todo: '필요' }; // 일정의 예약 상태 (선택 안 하면 표시 없음)
   const CATS = ['서류', '예약', '돈', '통신', '짐', '집', '기타', '투어예약', '사전준비']; // 저장된 값 검사용 (예전 분류 포함)
   const PREP_CATS = ['사전준비', '기타'];
   // 예전 분류(서류·예약·돈…)는 '사전준비'로 보여 줘요. 데이터는 바꾸지 않아요
