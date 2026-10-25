@@ -543,6 +543,15 @@
     return [...items, ...fl, ...arr, ...st].sort((a, b) => a.sort.localeCompare(b.sort));
   }
 
+  // 여행 중이면 일정 탭을 열 때 오늘 일차가 맨 위에 오게 해요 (위에 붙어 있는 메뉴 바로 아래)
+  function jumpToToday() {
+    if (ui.view !== 'trip' || (ui.tab || 'plan') !== 'plan') return false;
+    const el = $('#day-' + todayStr()); if (!el) return false;
+    el.scrollIntoView({ block: 'start' });
+    const tabs = app.querySelector('.tabs');
+    if (tabs) window.scrollBy(0, el.getBoundingClientRect().top - tabs.getBoundingClientRect().bottom - 6);
+    return true;
+  }
   function planTab(t) {
     const days = tripDays(t);
     const money = expTotals(t);
@@ -974,7 +983,23 @@
   const sheetRoot = $('#sheet-root');
   let sheetRefresh = null; // 열려 있는 창을 다시 그리는 함수 (가족 창)
   let sheetClose = null;
+  // 창이 열려 있는 동안 뒤 화면을 그 자리에 고정해요 (아이폰에서 창 안을 스크롤하면 뒤 화면까지 같이 내려가는 문제)
+  let sheetY = null;
+  function lockPage() {
+    if (sheetY !== null) return; // 창에서 창으로 바뀔 때는 처음 자리를 그대로 기억
+    sheetY = window.scrollY;
+    document.body.style.top = `-${sheetY}px`;
+    document.body.classList.add('sheet-open');
+  }
+  function unlockPage() {
+    if (sheetY === null) return;
+    const y = sheetY; sheetY = null;
+    document.body.classList.remove('sheet-open');
+    document.body.style.top = '';
+    window.scrollTo(0, y);
+  }
   function openSheet(title, body, foot, onMount) {
+    lockPage();
     sheetRoot.innerHTML = `
       <div class="sheet-scrim" data-scrim="1">
         <div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}">
@@ -983,7 +1008,7 @@
         </div>
       </div>`;
     const root = sheetRoot.firstElementChild;
-    const close = () => { sheetRoot.innerHTML = ''; document.removeEventListener('keydown', onKey); sheetClose = null; sheetRefresh = null; setTimeout(flushRemote, 0); };
+    const close = () => { sheetRoot.innerHTML = ''; unlockPage(); document.removeEventListener('keydown', onKey); sheetClose = null; sheetRefresh = null; setTimeout(flushRemote, 0); };
     const onKey = e => { if (e.key === 'Escape') close(); };
     document.addEventListener('keydown', onKey);
     root.addEventListener('click', e => { if (e.target.dataset.scrim || e.target.closest('[data-close]')) close(); });
@@ -1627,7 +1652,7 @@
   function clearTripHash() { if (/^#t=/.test(location.hash)) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* 무시 */ } } }
   function openTripHash(id) {
     const local = state.trips.find(x => x.id === id);
-    if (local) { ui.tripId = id; ui.view = 'trip'; ui.tab = 'plan'; clearTripHash(); render(); return; }
+    if (local) { ui.tripId = id; ui.view = 'trip'; ui.tab = 'plan'; clearTripHash(); render(); jumpToToday(); return; }
     if (!C()) return;
     pendingOpen = id;
     C().load().then(() => { if (C().state !== 'ready') familySheet('가족과 함께 쓰는 여행이에요. 가족으로 등록된 구글 계정으로 로그인하면 열려요.'); else toast('가족 여행을 불러오는 중…'); }).catch(() => {});
@@ -2196,10 +2221,10 @@
       case 'family': familySheet(); break;
       case 'del-example': deleteTrips(x => x.example); toast('예시 여행을 지웠어요'); break;
       case 'backup': backupSheet(); break;
-      case 'open-trip': selItem = null; ui.tripId = id; ui.view = 'trip'; ui.tab = ui.tab || 'plan'; render(); window.scrollTo(0, 0); break;
+      case 'open-trip': selItem = null; ui.tripId = id; ui.view = 'trip'; ui.tab = ui.tab || 'plan'; render(); if (!jumpToToday()) window.scrollTo(0, 0); break;
       case 'home': selItem = null; ui.view = 'home'; render(); window.scrollTo(0, 0); break;
       case 'edit-trip': tripSheet(t); break;
-      case 'tab': selItem = null; ui.tab = el.dataset.tab; render(); break;
+      case 'tab': selItem = null; ui.tab = el.dataset.tab; render(); if (ui.tab === 'plan') jumpToToday(); break;
       case 'pdf': pdfSheet(t); break;
       case 'day-title': dayTitleSheet(t, el.dataset.date); break;
       case 'add-item': itemSheet(t, null, el.dataset.date); break;
@@ -2250,6 +2275,7 @@
   seedFlightMemo();
   if (ui.view === 'shared') ui.view = 'home';
   render();
+  requestAnimationFrame(() => jumpToToday()); // 앱을 열 때 여행 중이면 오늘 일정부터
   const openFromHash = () => {
     const m = location.hash.match(/^#s=([01]\.[A-Za-z0-9_-]+)$/); if (m) { openShared(m[1], location.href); return; }
     const t = location.hash.match(/^#t=([A-Za-z0-9_-]{4,40})$/); if (t) openTripHash(t[1]);
