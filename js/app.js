@@ -1106,9 +1106,8 @@
       `${isNew ? '' : `<button type="button" class="btn danger left" id="f-del">${ICON.trash}삭제</button>`}<button type="button" class="btn" data-close="1">취소</button><button type="submit" class="btn primary">저장</button>`,
       (root, close) => {
         $('#f-del', root)?.addEventListener('click', () => {
-          t.items = t.items.filter(x => x.id !== item.id);
-          (t.expenses || []).forEach(e => { if (e.itemId === item.id) e.itemId = ''; }); // 경비는 남기고 연결만 풀기
-          save(); close(); render(); toast('일정을 삭제했어요');
+          const n = dropWithCosts(t, 'items', item.id);
+          save(); close(); render(); toast(n ? '일정과 연결된 비용을 삭제했어요' : '일정을 삭제했어요');
         });
         const updCost = () => {
           const box = $('#c-prev', root); if (!box) return;
@@ -1142,6 +1141,15 @@
   }
 
   // 경비
+  // 일정·항공편·숙소·준비 항목을 지우면 거기에 연결된 비용도 경비에서 같이 지워요
+  const linkedExp = (t, refId) => (t.expenses || []).filter(e => e.itemId === refId);
+  const linkedNote = (t, refId) => { const l = linkedExp(t, refId); return l.length ? ` 연결된 비용 ${fmtNum(l.reduce((a, e) => a + (krwOf(t, e) || 0), 0))}원도 경비에서 같이 지워져요.` : ''; };
+  function dropWithCosts(t, key, refId) {
+    t[key] = (t[key] || []).filter(x => x.id !== refId);
+    const n = linkedExp(t, refId).length;
+    if (n) t.expenses = t.expenses.filter(e => e.itemId !== refId);
+    return n;
+  }
   // 일정 입력창 안의 비용 칸 (해외 투어는 현지 통화로도 넣을 수 있어요). 연결된 비용이 여러 건이면 경비 탭에서 고치도록 안내해요
   function itemCostHtml(t, refId) {
     const linked = refId ? (t.expenses || []).filter(e => e.itemId === refId) : [];
@@ -1150,7 +1158,7 @@
       return `<div class="field"><span>비용</span><div class="note-small">비용이 ${linked.length}건 들어 있어요 (합계 ${fmtNum(krw)}원). 경비 탭에서 고치세요.</div></div>`;
     }
     const e = linked[0], tc = tripCurrency(t);
-    const cur = e ? e.currency : (isDomestic(t) ? 'KRW' : tc);
+    const cur = e ? e.currency : 'KRW'; // 새로 넣을 때는 원화가 기본
     const curOpts = Array.from(new Set([cur, tc, 'KRW', 'USD', ...Object.keys(CUR)])).filter(c => has(CUR, c));
     return `<div class="field"><span>비용 <span class="hint">(선택) 넣으면 경비 탭 합계에 들어가요</span></span>
       <div class="grid2 amt-row"><input type="text" id="c-amt" inputmode="decimal" value="${e ? esc(e.currency === 'KRW' ? fmtNum(e.amount) : e.amount) : ''}" placeholder="0" autocomplete="off" aria-label="비용 금액">
@@ -1229,9 +1237,8 @@
       (root, close) => {
         $('#s-in', root).addEventListener('change', () => { const a = val(root, 's-in'), b = $('#s-out', root); if (a && (!b.value || b.value < a)) b.value = a; });
         $('#s-del', root)?.addEventListener('click', () => {
-          t.stays = t.stays.filter(x => x.id !== s.id);
-          (t.expenses || []).forEach(e => { if (e.itemId === s.id) e.itemId = ''; });
-          save(); close(); render(); toast('숙소를 삭제했어요');
+          const n = dropWithCosts(t, 'stays', s.id);
+          save(); close(); render(); toast(n ? '숙소와 연결된 비용을 삭제했어요' : '숙소를 삭제했어요');
         });
         $('#sheet-form', root).addEventListener('submit', ev => {
           ev.preventDefault();
@@ -1254,7 +1261,7 @@
     const today = todayStr();
     const tc = tripCurrency(t);
     t.expenses = t.expenses || [];
-    e = e || { date: has(preset, 'date') ? preset.date : (days.includes(today) ? today : ''), itemId: preset.itemId || '', title: preset.title || '', cat: preset.cat || 'etc', amount: '', currency: preset.currency || (ui.lastCur && (ui.lastCur === 'KRW' || ui.lastCur === tc) ? ui.lastCur : tc), krw: null, pay: 'card', memo: '' };
+    e = e || { date: has(preset, 'date') ? preset.date : (days.includes(today) ? today : ''), itemId: preset.itemId || '', title: preset.title || '', cat: preset.cat || 'etc', amount: '', currency: preset.currency || 'KRW', krw: null, pay: 'card', memo: '' };
     const curOpts = Array.from(new Set([e.currency, tc, 'KRW', 'USD', ...Object.keys(CUR)]));
     const dateOpts = [['', '여행 전 · 날짜 없음'], ...days.map((d, i) => [d, `${i + 1}일차 ${fmtD(d)}`])];
     if (e.date && !days.includes(e.date)) dateOpts.push([e.date, fmtD(e.date)]);
@@ -1460,9 +1467,8 @@
         root.addEventListener('input', ev => { if (ev.target.id === 'f-dep' || ev.target.id === 'f-arr') { showSugg(ev.target.id.slice(2)); $('#f-err', root).textContent = ''; } upd(); });
         showSugg('dep'); showSugg('arr'); upd();
         $('#f-del', root)?.addEventListener('click', () => {
-          t.flights = t.flights.filter(x => x.id !== f.id);
-          (t.expenses || []).forEach(e => { if (e.itemId === f.id) e.itemId = ''; });
-          save(); close(); render(); toast('항공편을 삭제했어요');
+          const n = dropWithCosts(t, 'flights', f.id);
+          save(); close(); render(); toast(n ? '항공편과 연결된 비용을 삭제했어요' : '항공편을 삭제했어요');
         });
         $('#sheet-form', root).addEventListener('submit', e => {
           e.preventDefault();
@@ -2176,15 +2182,14 @@
         if (!el.classList.contains('armed')) {
           app.querySelectorAll('.del-item.armed').forEach(b => { b.classList.remove('armed'); b.innerHTML = ICON.trash; });
           el.classList.add('armed'); el.innerHTML = `${ICON.trash}삭제`;
-          toast('한 번 더 누르면 지워져요');
+          toast('한 번 더 누르면 지워져요.' + linkedNote(t, id));
           clearTimeout(delItemTimer);
           delItemTimer = setTimeout(() => { el.classList.remove('armed'); el.innerHTML = ICON.trash; }, 4000);
           break;
         }
         clearTimeout(delItemTimer);
-        t.items = t.items.filter(x => x.id !== id);
-        (t.expenses || []).forEach(e => { if (e.itemId === id) e.itemId = ''; }); // 경비는 남기고 연결만 풀기
-        save(); render(); toast('일정을 지웠어요');
+        const n = dropWithCosts(t, 'items', id);
+        save(); render(); toast(n ? '일정과 연결된 비용을 지웠어요' : '일정을 지웠어요');
         break;
       }
       case 'add-stay': staySheet(t, null); break;
@@ -2218,9 +2223,8 @@
       case 'edit-check': checkSheet(t, t.checklist.find(x => x.id === id)); break;
       case 'del-check': {
         const c = t.checklist.find(x => x.id === id);
-        confirmSheet(`'${c.text}' 항목을 지울까요?${(t.expenses || []).some(e => e.itemId === id) ? ' 넣어 둔 비용은 경비 탭에 그대로 남아요.' : ''}`, '삭제', () => {
-          t.checklist = t.checklist.filter(x => x.id !== id);
-          (t.expenses || []).forEach(e => { if (e.itemId === id) e.itemId = ''; });
+        confirmSheet(`'${c.text}' 항목을 지울까요?${linkedNote(t, id)}`, '삭제', () => {
+          dropWithCosts(t, 'checklist', id);
           save(); render();
         });
         break;
