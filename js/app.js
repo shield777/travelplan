@@ -543,13 +543,30 @@
     return [...items, ...fl, ...arr, ...st].sort((a, b) => a.sort.localeCompare(b.sort));
   }
 
-  // 여행 중이면 일정 탭을 열 때 오늘 일차가 맨 위에 오게 해요 (위에 붙어 있는 메뉴 바로 아래)
+  // 지금 시각에 진행 중인 일정 (끝 시간이 있으면 끝날 때까지, 없으면 다음 일정이 시작할 때까지).
+  // 진행 중인 게 없으면 다음 일정, 다 끝났으면 마지막 일정
+  function currentRow(dayEl) {
+    const d = new Date(), hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    const rows = [...dayEl.querySelectorAll('.tl-item[data-t]')].filter(r => r.dataset.t);
+    for (let k = 0; k < rows.length; k++) {
+      const start = rows[k].dataset.t, end = rows[k].dataset.e || (rows[k + 1] ? rows[k + 1].dataset.t : '');
+      if (start > hm) return rows[k];            // 아직 시작 전인 첫 일정
+      if (!end || end > hm) return rows[k];      // 진행 중
+    }
+    return rows[rows.length - 1] || null;
+  }
+  // 여행 중이면 일정 탭을 열 때 오늘 일차 제목 바로 아래에 진행 중인 일정이 오게 해요
+  // (일차 제목은 위에 붙어 있어서, 앞의 일정을 지나쳐도 몇 일차인지 보여요)
   function jumpToToday() {
     if (ui.view !== 'trip' || (ui.tab || 'plan') !== 'plan') return false;
     const el = $('#day-' + todayStr()); if (!el) return false;
     el.scrollIntoView({ block: 'start' });
-    const tabs = app.querySelector('.tabs');
-    if (tabs) window.scrollBy(0, el.getBoundingClientRect().top - tabs.getBoundingClientRect().bottom - 6);
+    const tabs = app.querySelector('.tabs'), head = el.querySelector('.day-head');
+    if (!tabs || !head) return true;
+    const row = currentRow(el);
+    const first = el.querySelector('.tl-item[data-t]:not([data-t=""])');
+    if (!row || row === first) window.scrollBy(0, el.getBoundingClientRect().top - tabs.getBoundingClientRect().bottom - 6);
+    else window.scrollBy(0, row.getBoundingClientRect().top - tabs.getBoundingClientRect().bottom - head.offsetHeight - 8);
     return true;
   }
   function planTab(t) {
@@ -618,7 +635,7 @@
     const sp = money && money.byItem[i.id];
     const foreign = sp ? Object.entries(sp.cur).filter(([c]) => c !== 'KRW').map(([c, a]) => fmtMoney(a, c)).join(' + ') : '';
     return `
-      <li class="tl-item ${selItem === i.id ? 'selected' : ''}" id="it-${i.id}">
+      <li class="tl-item ${selItem === i.id ? 'selected' : ''}" id="it-${i.id}" data-t="${esc(i.time || '')}" data-e="${esc(i.endTime || '')}">
         <div class="tl-time">${esc(i.time || '—')}${i.endTime ? `<small>~${esc(i.endTime)}</small>` : ''}${showDate ? `<small>${fmtD(i.date)}</small>` : ''}
           ${move && !ro() && (move.up || move.down) ? `<button class="sel-box ${selItem === i.id ? 'on' : ''}" data-act="sel-item" data-id="${i.id}" aria-pressed="${selItem === i.id}" aria-label="${esc(i.title)} 순서 옮기기 선택"></button>` : ''}</div>
         <div class="tl-rail"><span class="tl-dot"></span></div>
@@ -638,7 +655,7 @@
   function stayRow(s, kind) {
     const inn = kind === 'checkin';
     return `
-      <li class="tl-item stay">
+      <li class="tl-item stay" data-t="${esc((inn ? s.checkInTime : s.checkOutTime) || (inn ? '15:00' : '11:00'))}">
         <div class="tl-time">${esc((inn ? s.checkInTime : s.checkOutTime) || (inn ? '15:00' : '11:00'))}</div>
         <div class="tl-rail"><span class="tl-dot"></span></div>
         <div class="tl-card stay-card" data-act="goto-stay" data-id="${s.id}" role="button" tabindex="0">
@@ -656,7 +673,7 @@
       ? `${esc(f.flightNo)} 도착 · ${esc(apName(f.arr, f.arrName))}`
       : [airlineName(f.flightNo), dt.v ? `${dt.v}${dt.est ? '(추정)' : ''}` : '', f.counter ? `카운터 ${f.counter}` : ''].filter(Boolean).map(esc).join(' · ');
     return `
-      <li class="tl-item flight">
+      <li class="tl-item flight" data-t="${esc((arriveOnly ? f.arrTime : f.depTime) || '')}" data-e="${esc(arriveOnly ? '' : (!f.arrDate || f.arrDate === f.depDate ? f.arrTime || '' : '23:59'))}">
         <div class="tl-time">${esc(arriveOnly ? f.arrTime : f.depTime || '—')}</div>
         <div class="tl-rail"><span class="tl-dot"></span></div>
         <div class="tl-card flight" data-act="goto-flight" data-id="${f.id}" role="button" tabindex="0">
