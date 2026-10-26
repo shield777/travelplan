@@ -437,6 +437,10 @@ body.has-move-bar #toast { bottom: calc(90px + env(safe-area-inset-bottom, 0px))
 .resv { margin-left: 6px; font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 4px; letter-spacing: 0; }
 .resv.done { background: var(--ok-soft, #E3F3EA); color: var(--ok, #1F7A4D); }
 .resv.todo { background: var(--warn-soft); color: var(--warn); }
+.resv.paid { background: var(--accent-soft); color: var(--accent); }
+.resv.unpaid { background: var(--warn-soft); color: var(--warn); }
+.sub-pick { display: grid; gap: 4px; margin-top: 6px; padding-left: 10px; border-left: 2px solid var(--line); }
+.sub-pick .sub-l { font-size: 12px; color: var(--muted); font-weight: 600; }
 .tl-spent { font-size: 13px; font-weight: 500; color: var(--accent); margin-top: 2px; }
 .tl-spent small { color: var(--muted); font-weight: 400; }
 .card-acts { position: absolute; top: 4px; right: 4px; display: flex; gap: 2px; }

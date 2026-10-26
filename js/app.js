@@ -36,7 +36,9 @@
     { id: 'stay', label: '숙소' }, { id: 'shop', label: '쇼핑' }, { id: 'etc', label: '기타' }
   ];
   const TYPE_LABEL = Object.fromEntries(TYPES.map(t => [t.id, t.label]));
-  const RESV = { done: '완료', todo: '필요' }; // 일정의 예약 상태 (선택 안 하면 표시 없음)
+  const RESV = { done: '예약완료', todo: '예약필요' }; // 일정의 예약 상태 (선택 안 하면 표시 없음)
+  const PAID = { paid: '결제', unpaid: '미결제' };       // 예약 아래: 결제 상태
+  const PAY_BY = { cash: '현금', card: '카드', gln: 'GLN' }; // 결제 아래: 결제 수단
   const CATS = ['서류', '예약', '돈', '통신', '짐', '집', '기타', '투어예약', '사전준비']; // 저장된 값 검사용 (예전 분류 포함)
   const PREP_CATS = ['사전준비', '기타'];
   // 예전 분류(서류·예약·돈…)는 '사전준비'로 보여 줘요. 데이터는 바꾸지 않아요
@@ -65,7 +67,7 @@
   const prepOf = (t, id) => (id && (t.checklist || []).find(c => c.id === id)) || null;
   const expCat = (t, e) => { const c = prepOf(t, e.itemId); return c ? PREP_EXP[prepCat(c)] : e.cat; };
   const TYPE_TO_EXP = { move: 'move', sight: 'tour', food: 'food', stay: 'stay', shop: 'shop', etc: 'etc' };
-  const PAYS = [['card', '카드'], ['cash', '현금'], ['etc', '기타']];
+  const PAYS = [['card', '카드'], ['cash', '현금'], ['gln', 'GLN'], ['etc', '기타']];
   const PAY_LABEL = Object.fromEntries(PAYS);
 
   // ───────── 기본 도구 ─────────
@@ -620,6 +622,13 @@
     if (ta) t.dayTitles[b] = ta; else delete t.dayTitles[b];
   }
 
+  // 예약 상태 · 결제 상태 · 결제 수단 표시 (예: [예약완료] [결제 · 카드])
+  function resvBadges(i) {
+    if (!RESV[i.resv]) return '';
+    const pay = PAID[i.paid] ? `${PAID[i.paid]}${PAY_BY[i.payBy] ? ' · ' + PAY_BY[i.payBy] : ''}` : '';
+    return `<span class="resv ${i.resv}">${RESV[i.resv]}</span>${pay ? `<span class="resv ${i.paid}">${pay}</span>` : ''}`;
+  }
+  const resvText = i => !RESV[i.resv] ? '' : [RESV[i.resv], PAID[i.paid] ? PAID[i.paid] + (PAY_BY[i.payBy] ? ' · ' + PAY_BY[i.payBy] : '') : ''].filter(Boolean).join(' / ');
   function itemRow(i, showDate, money, t, move) {
     const map = i.place ? placeMap(t, i.place) : null;
     const sp = money && money.byItem[i.id];
@@ -630,7 +639,7 @@
           ${move && !ro() && (move.up || move.down) ? `<button class="sel-box ${selItem === i.id ? 'on' : ''}" data-act="sel-item" data-id="${i.id}" aria-pressed="${selItem === i.id}" aria-label="${esc(i.title)} 순서 옮기기 선택"></button>` : ''}</div>
         <div class="tl-rail"><span class="tl-dot"></span></div>
         <div class="tl-card" ${ro() ? '' : `data-act="edit-item" data-id="${i.id}" role="button" tabindex="0"`}>
-          <div class="tl-type">${ICON[i.type] || ICON.etc}${TYPE_LABEL[i.type] || '기타'}${RESV[i.resv] ? `<span class="resv ${i.resv}">${RESV[i.resv]}</span>` : ''}</div>
+          <div class="tl-type">${ICON[i.type] || ICON.etc}${TYPE_LABEL[i.type] || '기타'}${resvBadges(i)}</div>
           <div class="tl-title">${esc(i.title)}</div>
           ${map ? `<div class="tl-place"><a href="${esc(map.app)}" data-stop="1"${/^https?:/.test(map.app) ? ' target="_blank" rel="noopener"' : ''}>${esc(i.place)} ↗</a><span class="map-tag">${map.label}${appWord}</span></div>` : ''}
           ${i.memo ? `<div class="tl-memo">${esc(i.memo)}</div>` : ''}
@@ -1097,7 +1106,11 @@
         <label class="field"><span>끝 <span class="hint">(선택)</span></span><input type="time" id="f-end" value="${esc(item.endTime)}"></label>
       </div>
       <div class="field"><span>예약 <span class="hint">(선택) 투어·식당처럼 예약이 필요한 일정</span></span><div class="type-pick resv-pick">
-        ${[['', '선택 안 함'], ['done', '완료'], ['todo', '필요']].map(([v, l]) => `<label><input type="radio" name="f-resv" value="${v}" ${(item.resv || '') === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></div>
+        ${[['', '선택 안 함'], ['done', '예약완료'], ['todo', '예약필요']].map(([v, l]) => `<label><input type="radio" name="f-resv" value="${v}" ${(item.resv || '') === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
+        <div class="sub-pick" id="f-paid-wrap" ${item.resv ? '' : 'hidden'}><span class="sub-l">결제</span><div class="type-pick resv-pick">
+          ${[['', '선택 안 함'], ['paid', '결제'], ['unpaid', '미결제']].map(([v, l]) => `<label><input type="radio" name="f-paid" value="${v}" ${(item.paid || '') === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></div>
+        <div class="sub-pick" id="f-payby-wrap" ${item.resv && item.paid ? '' : 'hidden'}><span class="sub-l">결제 수단</span><div class="type-pick resv-pick">
+          ${[['', '선택 안 함'], ['cash', '현금'], ['card', '카드'], ['gln', 'GLN']].map(([v, l]) => `<label><input type="radio" name="f-payby" value="${v}" ${(item.payBy || '') === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></div></div>
       <label class="field"><span>장소 · 주소 <span class="hint">${isDomestic(t) ? '국내 여행이라 네이버지도 앱으로 열려요' : '해외 여행이라 구글맵 앱으로 열려요'}</span></span><input type="text" id="f-place" value="${esc(item.place)}" placeholder="${isDomestic(t) ? '예: 제주 애월읍 애월해안로 272' : '예: Kiyomizu-dera 또는 현지 주소'}"></label>
       <label class="field"><span>메모</span><textarea id="f-memo">${esc(item.memo)}</textarea></label>
       ${item.cost ? `<label class="field"><span>비용 메모 <span class="hint">(이전 방식 · 합계에는 안 들어가요)</span></span><input type="text" id="f-cost" value="${esc(item.cost)}"></label>` : ''}
@@ -1109,6 +1122,9 @@
           const n = dropWithCosts(t, 'items', item.id);
           save(); close(); render(); toast(n ? '일정과 연결된 비용을 삭제했어요' : '일정을 삭제했어요');
         });
+        const pick = n => (root.querySelector(`input[name=${n}]:checked`) || {}).value || '';
+        const updResv = () => { $('#f-paid-wrap', root).hidden = !pick('f-resv'); $('#f-payby-wrap', root).hidden = !pick('f-resv') || !pick('f-paid'); };
+        root.querySelectorAll('input[name=f-resv], input[name=f-paid]').forEach(r => r.addEventListener('change', updResv));
         const updCost = () => {
           const box = $('#c-prev', root); if (!box) return;
           const amt = parseAmount(val(root, 'c-amt')), c = $('#c-cur', root).value;
@@ -1123,11 +1139,11 @@
           if (!title) { $('#f-err', root).textContent = '무엇을 하는지 적어 주세요.'; return; }
           if (val(root, 'c-amt') && !(parseAmount(val(root, 'c-amt')) > 0)) { $('#f-err', root).textContent = '비용은 숫자로 넣어 주세요.'; return; }
           const before = { date: item.date, title: item.title, type: item.type };
-          const data = { date: val(root, 'f-date'), time: val(root, 'f-time'), endTime: val(root, 'f-end'), type: (root.querySelector('input[name=f-type]:checked') || {}).value || 'etc', title, place: val(root, 'f-place'), memo: val(root, 'f-memo'), cost: val(root, 'f-cost'), resv: (root.querySelector('input[name=f-resv]:checked') || {}).value || '' };
-          if (!data.cost) delete data.cost;
-          if (!data.resv) delete data.resv;
+          const data = { date: val(root, 'f-date'), time: val(root, 'f-time'), endTime: val(root, 'f-end'), type: (root.querySelector('input[name=f-type]:checked') || {}).value || 'etc', title, place: val(root, 'f-place'), memo: val(root, 'f-memo'), cost: val(root, 'f-cost'), resv: pick('f-resv'), paid: '', payBy: '' };
+          if (data.resv) { data.paid = pick('f-paid'); if (data.paid) data.payBy = pick('f-payby'); } // 위를 안 고르면 아래도 비워요
+          ['cost', 'resv', 'paid', 'payBy'].forEach(k => { if (!data[k]) delete data[k]; });
           const iid = isNew ? uid() : item.id;
-          if (isNew) t.items.push({ id: iid, ...data }); else { if (!data.cost) delete item.cost; if (!data.resv) delete item.resv; Object.assign(item, data); }
+          if (isNew) t.items.push({ id: iid, ...data }); else { ['cost', 'resv', 'paid', 'payBy'].forEach(k => { if (!data[k]) delete item[k]; }); Object.assign(item, data); }
           const cur = applyItemCost(t, root, iid, data, before);
           // 일정 종류(식사·관광…)를 바꾸면, 종류에 맞춰 자동으로 정해졌던 경비 분류도 따라 바꿔요 (경비 탭에서 직접 고른 분류는 그대로)
           if (!isNew && before.type !== data.type) {
@@ -1178,7 +1194,8 @@
       if (ex.amount !== amount || ex.currency !== currency) Object.assign(ex, { amount, currency, krw: null });
       if (ex.date === before.date) ex.date = data.date;     // 일정 날짜를 옮기면 비용 날짜도 따라가요
       if (ex.title === before.title) ex.title = data.title;
-    } else t.expenses.push({ id: uid(), date: data.date, itemId: refId, title: data.title, cat: TYPE_TO_EXP[data.type] || 'etc', amount, currency, krw: null, pay: 'card', memo: '' });
+      if (data.payBy) ex.pay = data.payBy; // 일정에서 고른 결제 수단을 경비에도
+    } else t.expenses.push({ id: uid(), date: data.date, itemId: refId, title: data.title, cat: TYPE_TO_EXP[data.type] || 'etc', amount, currency, krw: null, pay: data.payBy || 'card', memo: '' });
     return currency;
   }
 
@@ -1821,7 +1838,7 @@
       id: sid(t.id), example: !!t.example, year: Number(t.year) || '', country: str(t.country, 40), city: str(t.city, 60), subtitle: str(t.subtitle, 80),
       startDate: date(t.startDate), endDate: date(t.endDate), memo: str(t.memo, 2000),
       dayTitles: Object.fromEntries(Object.entries(titles).filter(([k]) => date(k)).map(([k, v]) => [k, str(v, 80)])),
-      items: arr(t.items).map(i => ({ id: sid(i.id), date: date(i.date), time: time(i.time), endTime: time(i.endTime), type: Object.prototype.hasOwnProperty.call(TYPE_LABEL, i.type) ? i.type : 'etc', title: str(i.title, 200), place: str(i.place, 200), memo: str(i.memo, 2000), cost: str(i.cost, 100), ...(has(RESV, i.resv) ? { resv: i.resv } : {}) })),
+      items: arr(t.items).map(i => ({ id: sid(i.id), date: date(i.date), time: time(i.time), endTime: time(i.endTime), type: Object.prototype.hasOwnProperty.call(TYPE_LABEL, i.type) ? i.type : 'etc', title: str(i.title, 200), place: str(i.place, 200), memo: str(i.memo, 2000), cost: str(i.cost, 100), ...(has(RESV, i.resv) ? { resv: i.resv } : {}), ...(has(PAID, i.paid) ? { paid: i.paid } : {}), ...(has(PAY_BY, i.payBy) ? { payBy: i.payBy } : {}) })),
       stays: arr(t.stays).map(s => ({ id: sid(s.id), name: str(s.name, 120), address: str(s.address, 200), checkIn: date(s.checkIn), checkInTime: time(s.checkInTime), checkOut: date(s.checkOut), checkOutTime: time(s.checkOutTime), confirmNo: str(s.confirmNo, 40), phone: str(s.phone, 40), memo: str(s.memo, 500) })),
       flights: arr(t.flights).map(f => ({ id: sid(f.id), flightNo: str(f.flightNo, 10), dep: str(f.dep, 3).toUpperCase(), arr: str(f.arr, 3).toUpperCase(), depName: str(f.depName, 80), arrName: str(f.arrName, 80), depDate: date(f.depDate), depTime: time(f.depTime), arrDate: date(f.arrDate), arrTime: time(f.arrTime), depTerminal: str(f.depTerminal, 10), arrTerminal: str(f.arrTerminal, 10), gate: str(f.gate, 10), counter: str(f.counter, 20), seat: str(f.seat, 40), pnr: str(f.pnr, 20), memo: str(f.memo, 1000) })),
       people: Number(t.people) >= 1 && Number(t.people) <= 50 ? Math.round(Number(t.people)) : '',
@@ -2093,7 +2110,7 @@
           ${es.length ? `<table><tbody>${es.map(e => e.s
             ? `<tr><td class="t">${esc((e.kind === 'checkin' ? e.s.checkInTime : e.s.checkOutTime) || '')}</td><td style="width:44px;color:#5B6472">숙소</td><td><b>${e.kind === 'checkin' ? '체크인' : '체크아웃'} · ${esc(e.s.name)}</b></td></tr>`
             : e.kind === 'item'
-            ? `<tr><td class="t">${esc(e.i.time || '—')}${e.i.endTime ? '~' + esc(e.i.endTime) : ''}</td><td style="width:44px;color:#5B6472">${TYPE_LABEL[e.i.type] || ''}</td><td><b>${esc(e.i.title)}</b>${RESV[e.i.resv] ? ` <span style="color:${e.i.resv === 'done' ? '#1F7A4D' : '#B4541A'}">[${RESV[e.i.resv]}]</span>` : ''}${e.i.place ? ` · ${esc(e.i.place)}` : ''}${e.i.memo ? `<br><span style="color:#5B6472">${esc(e.i.memo)}</span>` : ''}${e.i.cost ? `<br><span style="color:#5B6472">${esc(e.i.cost)}</span>` : ''}</td></tr>`
+            ? `<tr><td class="t">${esc(e.i.time || '—')}${e.i.endTime ? '~' + esc(e.i.endTime) : ''}</td><td style="width:44px;color:#5B6472">${TYPE_LABEL[e.i.type] || ''}</td><td><b>${esc(e.i.title)}</b>${resvText(e.i) ? ` <span style="color:${e.i.resv === 'done' ? '#1F7A4D' : '#B4541A'}">[${esc(resvText(e.i))}]</span>` : ''}${e.i.place ? ` · ${esc(e.i.place)}` : ''}${e.i.memo ? `<br><span style="color:#5B6472">${esc(e.i.memo)}</span>` : ''}${e.i.cost ? `<br><span style="color:#5B6472">${esc(e.i.cost)}</span>` : ''}</td></tr>`
             : `<tr><td class="t">${esc(e.kind === 'arrive' ? e.f.arrTime : e.f.depTime)}</td><td style="width:44px;color:#5B6472">항공</td><td><div class="r-flight"><span class="c">${esc(e.f.dep)} → ${esc(e.f.arr)}</span><span>${esc(e.f.flightNo)} ${esc(e.f.depTime)}–${esc(e.f.arrTime)}</span><span>${esc(terminalOf(e.f, 'dep').v)}${e.f.counter ? ' · 카운터 ' + esc(e.f.counter) : ''}</span></div></td></tr>`).join('')}</tbody></table>`
             : `<div style="color:#5B6472;padding:4px 6px">일정 없음</div>`}`;
       }).join('');
