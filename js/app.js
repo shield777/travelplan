@@ -436,6 +436,7 @@
             <div class="year-head">${esc(y)}<span>${byYear[y].length}개 여행</span></div>
             ${byYear[y].sort((a, b) => (a.startDate || '').localeCompare(b.startDate || '')).map(tripCard).join('')}
           </section>`).join('')}
+        <div class="app-share"><button class="btn sm" data-act="share-app">${ICON.share}이 앱을 지인에게 보내기</button></div>
       </div>`;
   }
 
@@ -1943,6 +1944,16 @@
     if (ex) confirmSheet('이미 저장된 여행이에요. 받은 일정으로 바꿀까요? 이 기기에서 고친 내용은 사라져요.', '바꾸기', doSave); else doSave();
   }
 
+  // 이 앱을 지인에게 알려 주기 (여행 링크가 아니라 앱 주소 + 사용 안내)
+  function shareApp() {
+    const url = location.origin + location.pathname.replace(/index\.html$/, '');
+    const text = `여행 일정 앱이야. 설치 없이 무료로 쓸 수 있어.
+1) 아이폰은 Safari로 열고 공유 → '홈 화면에 추가' (안드로이드는 Chrome ⋮ → '홈 화면에 추가')
+2) 처음에 보이는 오사카 예시는 '예시 지우기'로 지우고 '새 여행'으로 만들면 돼
+3) 일행이랑 같이 쓰려면 위쪽 사람 모양 버튼 → 구글 로그인 → 그룹 만들기 → 일행 이메일 추가`;
+    if (navigator.share) navigator.share({ title: '여행일정', text, url }).catch(err => { if (err && err.name !== 'AbortError') copyText(`${text}\n${url}`); });
+    else copyText(`${text}\n${url}`);
+  }
   function copyText(text) {
     const fallback = () => {
       const ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
@@ -2231,6 +2242,7 @@
       case 'family': familySheet(); break;
       case 'del-example': deleteTrips(x => x.example); toast('예시 여행을 지웠어요'); break;
       case 'backup': backupSheet(); break;
+      case 'share-app': shareApp(); break;
       case 'open-trip': selItem = null; ui.tripId = id; ui.view = 'trip'; ui.tab = ui.tab || 'plan'; render(); if (!jumpToToday()) window.scrollTo(0, 0); break;
       case 'home': selItem = null; ui.view = 'home'; render(); window.scrollTo(0, 0); break;
       case 'edit-trip': tripSheet(t); break;
