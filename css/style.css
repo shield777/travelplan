@@ -439,7 +439,7 @@ body.has-move-bar #toast { bottom: calc(90px + env(safe-area-inset-bottom, 0px))
 .resv.todo { background: var(--warn-soft); color: var(--warn); }
 .resv.paid { background: var(--accent-soft); color: var(--accent); }
 .resv.unpaid { background: var(--warn-soft); color: var(--warn); }
-.tp3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.tp3 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 4px; }
 /* 시작·끝을 한 줄에 넣으려고 칸을 작게: 화살표를 빼고 글자를 가운데로 (글자 크기는 16px 그대로라 아이폰에서 확대되지 않아요) */
 .time-row { gap: 8px; }
 .tp3 select { -webkit-appearance: none; appearance: none; background-image: none; padding: 0 2px; text-align: center; text-align-last: center; }
