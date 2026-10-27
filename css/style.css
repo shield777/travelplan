@@ -442,6 +442,8 @@ body.has-move-bar #toast { bottom: calc(90px + env(safe-area-inset-bottom, 0px))
 .time-pick { display: block; min-width: 0; }
 .time-pick select, .time-pick input { width: 100%; min-width: 0; }
 .tp-mode { justify-self: end; margin-top: -6px; font-size: 12px; color: var(--muted); }
+.tp-mode { gap: 5px; }
+.check-inline.tp-mode input { width: 15px; height: 15px; }
 .sub-pick { display: grid; gap: 4px; margin-top: 6px; padding-left: 10px; border-left: 2px solid var(--line); }
 .sub-pick .sub-l { font-size: 12px; color: var(--muted); font-weight: 600; }
 .tl-spent { font-size: 13px; font-weight: 500; color: var(--accent); margin-top: 2px; }
