@@ -1100,10 +1100,10 @@
     openSheet(isNew ? '일정 추가' : '일정 수정', `
       <div class="field"><span>종류</span><div class="type-pick">${TYPES.map(ty => `<label><input type="radio" name="f-type" value="${ty.id}" ${item.type === ty.id ? 'checked' : ''}>${ICON[ty.id]}<span>${ty.label}</span></label>`).join('')}</div></div>
       <label class="field"><span>무엇을 하나요</span><input type="text" id="f-title" value="${esc(item.title)}" placeholder="예: 유니버설 스튜디오" required></label>
-      <label class="field"><span>날짜</span><select id="f-date">${days.map((d, i) => `<option value="${d}" ${d === item.date ? 'selected' : ''}>${i + 1}일차 ${fmtD(d)}</option>`).join('')}${days.includes(item.date) ? '' : `<option value="${esc(item.date)}" selected>${fmtD(item.date)}</option>`}</select></label>
-      <div class="grid2">
-        <div class="field"><span>시작</span>${timePick('f-time', item.time)}</div>
-        <div class="field"><span>끝 <span class="hint">(선택)</span></span>${timePick('f-end', item.endTime)}</div>
+      <div class="grid3">
+        <label class="field"><span>날짜</span><select id="f-date">${days.map((d, i) => `<option value="${d}" ${d === item.date ? 'selected' : ''}>${i + 1}일차 ${fmtD(d)}</option>`).join('')}${days.includes(item.date) ? '' : `<option value="${esc(item.date)}" selected>${fmtD(item.date)}</option>`}</select></label>
+        <label class="field"><span>시작</span>${timePick('f-time', item.time)}</label>
+        <label class="field"><span>끝 <span class="hint">(선택)</span></span>${timePick('f-end', item.endTime)}</label>
       </div>
       <button type="button" class="btn sm ghost tp-mode" id="f-tp-mode"></button>
       <div class="field"><span>예약 <span class="hint">(선택) 투어·식당처럼 예약이 필요한 일정</span></span><div class="type-pick resv-pick">
@@ -1124,24 +1124,19 @@
           save(); close(); render(); toast(n ? '일정과 연결된 비용을 삭제했어요' : '일정을 삭제했어요');
         });
         const pick = n => (root.querySelector(`input[name=${n}]:checked`) || {}).value || '';
-        // 분은 기본 00·30만, '1분 단위로'를 누르면 00~59 (예전에 넣은 시간이 30분 단위가 아니면 처음부터 1분 단위)
-        let fullMin = ['f-time', 'f-end'].some(id => { const m = (val(root, id).split(':')[1] || '00'); return m !== '00' && m !== '30'; });
-        const fillMins = () => {
+        // 시간은 기본 30분 간격 목록, '1분 단위로 입력'을 누르면 원래 시간 칸 (예전에 넣은 시간이 30분 단위가 아니면 처음부터 1분 단위)
+        let fullMin = ['f-time', 'f-end'].some(id => { const v = val(root, id); return v && !HALF_HOURS.includes(v); });
+        const showMode = () => {
           root.querySelectorAll('.time-pick').forEach(tp => {
-            const cur = ($('input[type=hidden]', tp).value.split(':')[1]) || '00';
-            const mins = fullMin ? Array.from({ length: 60 }, (_, k) => String(k).padStart(2, '0')) : ['00', '30'];
-            if (!mins.includes(cur)) mins.push(cur);
-            $('.tp-m', tp).innerHTML = mins.map(m => `<option ${m === cur ? 'selected' : ''}>${m}</option>`).join('');
+            const sel = $('.tp-sel', tp), inp = $('.tp-native', tp);
+            if (!fullMin) sel.innerHTML = halfOpts(inp.value);
+            sel.hidden = fullMin; inp.hidden = !fullMin;
           });
-          $('#f-tp-mode', root).textContent = fullMin ? '30분 단위로 보기' : '1분 단위로 입력';
+          $('#f-tp-mode', root).textContent = fullMin ? '30분 단위로 고르기' : '1분 단위로 입력';
         };
-        root.querySelectorAll('.time-pick').forEach(tp => tp.addEventListener('change', () => {
-          const h = $('.tp-h', tp).value;
-          $('input[type=hidden]', tp).value = h ? `${h}:${$('.tp-m', tp).value || '00'}` : '';
-          $('.tp-m', tp).disabled = !h;
-        }));
-        $('#f-tp-mode', root).addEventListener('click', () => { fullMin = !fullMin; fillMins(); });
-        fillMins();
+        root.querySelectorAll('.time-pick .tp-sel').forEach(sel => sel.addEventListener('change', () => { sel.nextElementSibling.value = sel.value; }));
+        $('#f-tp-mode', root).addEventListener('click', () => { fullMin = !fullMin; showMode(); });
+        showMode();
         const updResv = () => { $('#f-paid-wrap', root).hidden = !pick('f-resv'); $('#f-payby-wrap', root).hidden = !pick('f-resv') || !pick('f-paid'); };
         root.querySelectorAll('input[name=f-resv], input[name=f-paid]').forEach(r => r.addEventListener('change', updResv));
         const updCost = () => {
@@ -1176,12 +1171,12 @@
   }
 
   // 경비
-  // 일정 시간 고르기: 시(--·00~23) + 분(기본 00·30). 값은 숨은 칸에 HH:MM으로
+  // 일정 시간 칸: 기본은 30분 간격 목록(00:00·00:30…), '1분 단위로 입력'을 누르면 원래의 시간 입력칸
+  const HALF_HOURS = Array.from({ length: 48 }, (_, k) => `${String(Math.floor(k / 2)).padStart(2, '0')}:${k % 2 ? '30' : '00'}`);
+  const halfOpts = v => ['', ...HALF_HOURS, ...(v && !HALF_HOURS.includes(v) ? [v] : [])].sort()
+    .map(x => `<option value="${x}" ${x === (v || '') ? 'selected' : ''}>${x || '--:--'}</option>`).join('');
   function timePick(id, v) {
-    const h = v ? v.split(':')[0] : '';
-    const hours = ['', ...Array.from({ length: 24 }, (_, k) => String(k).padStart(2, '0'))];
-    return `<div class="time-pick"><select class="tp-h" aria-label="시">${hours.map(x => `<option value="${x}" ${x === h ? 'selected' : ''}>${x === '' ? '--' : x + '시'}</option>`).join('')}</select>
-      <span>:</span><select class="tp-m" aria-label="분" ${h ? '' : 'disabled'}></select><input type="hidden" id="${id}" value="${esc(v || '')}"></div>`;
+    return `<span class="time-pick"><select class="tp-sel" aria-label="시간">${halfOpts(v)}</select><input type="time" id="${id}" class="tp-native" value="${esc(v || '')}"></span>`;
   }
   // 일정·항공편·숙소·준비 항목을 지우면 거기에 연결된 비용도 경비에서 같이 지워요
   const linkedExp = (t, refId) => (t.expenses || []).filter(e => e.itemId === refId);
