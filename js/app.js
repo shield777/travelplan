@@ -1954,6 +1954,21 @@
 
   // 공유: 링크 하나로 보내요. 링크를 받은 사람은 누구나 볼 수 있고(로그인 없이, 바뀌면 자동 반영),
   // 고치기는 가족 공간을 만든 사람과 수정 권한을 받은 가족만 (로그인 후)
+  // 공유 창 아래: 고칠 수 있는 사람 목록 (만든 사람은 여기서 바로 권한을 바꿔요)
+  function editorsBox(c) {
+    const fam = c.family;
+    if (c.state !== 'ready' || !fam) return '<p class="note-small" style="margin:0">로그인하면 고칠 수 있는 사람 목록이 보여요.</p>';
+    const rows = (fam.members || []).map(m => {
+      const owner = m === fam.ownerEmail, ed = owner || (fam.editors || []).includes(m);
+      const tag = owner ? '<em>만든 사람</em>' : c.isOwner
+        ? `<button type="button" class="btn sm perm-btn ${ed ? 'on' : ''}" data-perm="${esc(m)}" data-on="${ed ? '' : '1'}" aria-pressed="${ed}">${ed ? '수정 가능' : '보기만'}</button>`
+        : `<em class="${ed ? '' : 'ro'}">${ed ? '수정 가능' : '보기만'}</em>`;
+      return `<li><span>${esc(m)}</span>${m === c.email ? '<em>나</em>' : ''}${tag}</li>`;
+    }).join('');
+    return `<div class="field" style="margin-top:4px"><span>고칠 수 있는 사람 <span class="hint">${c.isOwner ? '버튼을 누르면 바뀌어요' : '권한은 만든 사람이 바꿔요'}</span></span>
+      <ul class="fam-list">${rows}</ul>
+      <button type="button" class="btn sm ghost" id="f-fam" style="justify-self:start">${ICON.users}가족 추가·관리</button></div>`;
+  }
   const famLink = t => `${location.origin}${location.pathname}#t=${t.cloud ? t.cloud.fam + '.' : ''}${t.id}`;
   function shareSheet(t) {
     openSheet('일정 공유', `<div class="fam-share" id="fam-share"></div>`,
@@ -1970,7 +1985,8 @@
               <div class="fam-row"><input type="text" id="f-link" readonly value="${esc(famLink(t))}" aria-label="공유 링크"><button type="button" class="btn" id="f-copy">복사</button></div>
               <div class="fam-row"><button type="button" class="btn primary" id="f-send">${ICON.share}카톡으로 보내기</button>${locked(t) ? '' : '<button type="button" class="btn sm ghost" id="f-off">공유 끄기</button>'}</div>
               <div class="ap-preview" id="f-msg" style="color:var(--warn)"></div>
-              ${locked(t) ? '<p class="note-small" style="margin:0">이 여행은 <b>보기 전용</b>이에요. 고치려면 가족 공간을 만든 사람에게 수정 권한을 받으세요.</p>' : ''}`;
+              ${locked(t) ? '<p class="note-small" style="margin:0">이 여행은 <b>보기 전용</b>이에요. 고치려면 가족 공간을 만든 사람에게 수정 권한을 받으세요.</p>' : ''}
+              ${editorsBox(c)}`;
           } else if (c.state === 'ready' && c.canEdit(c.family.id) === false) {
             fs.innerHTML = `<p class="note-small" style="margin:0">여행을 올려서 공유하려면 가족 공간을 만든 사람에게 <b>수정 권한</b>을 받아야 해요.</p>`;
           } else if (c.state === 'ready') {
@@ -1993,6 +2009,8 @@
         let offArmed = false;
         fs.addEventListener('click', async ev => {
           const b = ev.target.closest('button'); if (!b) return;
+          if (b.dataset.perm) { b.disabled = true; try { await C().setEditor(b.dataset.perm, !!b.dataset.on); toast(b.dataset.on ? '수정 권한을 줬어요' : '보기만 하도록 바꿨어요'); } catch (err) { toast('바꾸지 못했어요. 인터넷 연결을 확인해 주세요.'); } drawFam(); return; }
+          if (b.id === 'f-fam') { close(); familySheet(); return; }
           if (b.id === 'f-copy') { copyText(famLink(t)); ready(); }
           else if (b.id === 'f-send') {
             ready();
