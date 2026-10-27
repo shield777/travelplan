@@ -1977,12 +1977,11 @@
     }).join('');
     return `<div class="field" style="margin-top:4px"><span>고칠 수 있는 사람 <span class="hint">${c.isOwner ? '버튼을 누르면 바뀌어요' : '권한은 만든 사람이 바꿔요'}</span></span>
       <ul class="fam-list">${rows}</ul>
-      <button type="button" class="btn sm ghost" id="f-fam" style="justify-self:start">${ICON.users}추가·관리</button></div>
-      ${APP_SHARE}`;
+      <div class="share-btns"><button type="button" class="btn sm ghost" id="f-fam">${ICON.users}추가·관리</button>${APP_BTN}</div></div>`;
   }
-  const APP_SHARE = `<div class="app-share"><b>이 앱 알려 주기</b>
-      <span class="note-small">함께 가지 않는 지인에게 앱 주소와 사용법만 보내요. 이 여행은 보내지 않아요.</span>
-      <button type="button" class="btn sm" id="f-app">${ICON.share}이 앱을 지인에게 보내기</button></div>`;
+  // 새로 공유: 이 여행이 아니라 앱 주소와 사용법을 보내요 (함께 가지 않는 지인에게)
+  const APP_BTN = `<button type="button" class="btn sm ghost" id="f-app" aria-label="이 앱을 지인에게 새로 공유">${ICON.share}새로 공유</button>`;
+  const APP_SHARE = `<div class="share-btns">${APP_BTN}</div>`;
   const famLink = t => `${location.origin}${location.pathname}#t=${t.cloud ? t.cloud.fam + '.' : ''}${t.id}`;
   function shareSheet(t) {
     openSheet('일정 공유', `<div class="fam-share" id="fam-share"></div>`,
