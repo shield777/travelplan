@@ -1104,8 +1104,10 @@
         <label class="field"><span>날짜</span><select id="f-date">${days.map((d, i) => `<option value="${d}" ${d === item.date ? 'selected' : ''}>${i + 1}일차 ${fmtD(d)}</option>`).join('')}${days.includes(item.date) ? '' : `<option value="${esc(item.date)}" selected>${fmtD(item.date)}</option>`}</select></label>
         <label class="check-inline tp-mode"><input type="checkbox" id="f-tp-mode"> 분단위 입력</label>
       </div>
-      <div class="field"><span>시작</span>${timePick('f-time', item.time)}</div>
-      <div class="field"><span>끝 <span class="hint">(선택)</span></span>${timePick('f-end', item.endTime)}</div>
+      <div class="grid2 time-row">
+        <div class="field"><span>시작</span>${timePick('f-time', item.time)}</div>
+        <div class="field"><span>끝 <span class="hint">(선택)</span></span>${timePick('f-end', item.endTime)}</div>
+      </div>
       <div class="field"><span>예약 <span class="hint">(선택) 투어·식당처럼 예약이 필요한 일정</span></span><div class="type-pick resv-pick">
         ${[['', '선택 안 함'], ['done', '예약완료'], ['todo', '예약필요']].map(([v, l]) => `<label><input type="radio" name="f-resv" value="${v}" ${(item.resv || '') === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
         <div class="sub-pick" id="f-paid-wrap" ${item.resv ? '' : 'hidden'}><span class="sub-l">결제</span><div class="type-pick resv-pick">
