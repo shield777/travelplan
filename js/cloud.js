@@ -72,7 +72,7 @@
           auth.onAuthStateChanged(u => { user = u; onUser(); if (first) { first = false; resolve(); } });
         });
       })
-      .catch(err => { loading = null; setState('error', '가족 기능을 불러오지 못했어요. 인터넷 연결을 확인하세요.'); throw err; });
+      .catch(err => { loading = null; setState('error', '함께 쓰기 기능을 불러오지 못했어요. 인터넷 연결을 확인하세요.'); throw err; });
     return loading;
   }
 
@@ -174,7 +174,7 @@
 
   function explain(err) {
     const c = (err && err.code) || '';
-    if (c === 'permission-denied') return '권한이 없어요. 가족으로 등록된 구글 계정인지 확인하세요.';
+    if (c === 'permission-denied') return '권한이 없어요. 멤버로 등록된 구글 계정인지 확인하세요.';
     if (c === 'auth/popup-closed-by-user' || c === 'auth/cancelled-popup-request') return '로그인을 취소했어요.';
     if (c === 'auth/unauthorized-domain') return 'Firebase 설정에서 승인된 도메인에 shield777.github.io를 추가해야 해요.';
     if (c === 'auth/operation-not-allowed') return 'Firebase에서 Google 로그인을 켜야 해요 (Authentication → 로그인 방법).';
@@ -214,7 +214,7 @@
 
     async createFamily(name) {
       await db.collection('families').add({
-        name: (name || '우리 가족').slice(0, 30), owner: user.uid, ownerEmail: myEmail(), members: [myEmail()],
+        name: (name || '우리 그룹').slice(0, 30), owner: user.uid, ownerEmail: myEmail(), members: [myEmail()],
         createdAt: window.firebase.firestore.FieldValue.serverTimestamp()
       });
     },

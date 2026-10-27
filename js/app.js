@@ -425,7 +425,7 @@
       <div class="wrap">
         <header class="topbar">
           <div class="grow brand">여행일정</div>
-          ${window.TPCloud ? `<button class="btn icon sm fam-btn ${famDot()}" data-act="family" aria-label="가족과 함께 쓰기">${ICON.users}</button>` : ''}
+          ${window.TPCloud ? `<button class="btn icon sm fam-btn ${famDot()}" data-act="family" aria-label="멤버와 함께 쓰기">${ICON.users}</button>` : ''}
           <button class="btn sm" data-act="backup">불러오기</button>
           <button class="btn primary sm" data-act="new-trip">${ICON.plus}새 여행</button>
         </header>
@@ -447,7 +447,7 @@
       <div class="trip-wrap">
       <button class="trip-card" data-act="open-trip" data-id="${t.id}">
         <div>
-          <div class="crumb">${esc(t.year || '')} · <b>${esc(t.country || '나라 미정')}</b>${t.example ? '<span class="example-badge">예시</span>' : ''}${t.receivedAt ? '<span class="recv-badge">공유받음</span>' : ''}${t.cloud ? '<span class="recv-badge">가족 공유</span>' : ''}</div>
+          <div class="crumb">${esc(t.year || '')} · <b>${esc(t.country || '나라 미정')}</b>${t.example ? '<span class="example-badge">예시</span>' : ''}${t.receivedAt ? '<span class="recv-badge">공유받음</span>' : ''}${t.cloud ? '<span class="recv-badge">공유 중</span>' : ''}</div>
           <h3>${esc(t.city || '여행지 미정')}</h3>
           ${t.subtitle ? `<div class="sub">${esc(t.subtitle)}</div>` : ''}
         </div>
@@ -474,7 +474,7 @@
           <div class="grow"></div>
           <button class="btn sm" data-act="pdf">${ICON.doc}PDF</button>
           ${shared()
-            ? (sharedLive ? `<button class="btn sm" data-act="family">${ICON.users}가족 로그인</button>` : `<button class="btn primary sm" data-act="save-shared">${ICON.save}내 앱에 저장</button>`)
+            ? (sharedLive ? `<button class="btn sm" data-act="family">${ICON.users}멤버 로그인</button>` : `<button class="btn primary sm" data-act="save-shared">${ICON.save}내 앱에 저장</button>`)
             : `<button class="btn sm" data-act="share">${ICON.share}공유</button>${ro() ? '' : `<button class="btn sm" data-act="edit-trip">${ICON.edit}여행 정보</button>`}`}
         </header>
         <section class="trip-head">
@@ -488,7 +488,7 @@
         </section>
         ${shared() && sharedLive ? `<div class="shared-banner">
           <b>공유받은 일정 · 보기 전용</b>
-          <span>보낸 사람이 일정을 바꾸면 <b>자동으로 반영</b>돼요. 수정 권한을 받은 가족은 <b>가족 로그인</b>을 하면 고칠 수 있어요.</span>
+          <span>보낸 사람이 일정을 바꾸면 <b>자동으로 반영</b>돼요. 수정 권한을 받은 멤버는 <b>멤버 로그인</b>을 하면 고칠 수 있어요.</span>
         </div>` : ''}
         ${shared() && !sharedLive ? `<div class="shared-banner">
           <b>공유받은 일정 · 보기 전용${t.shareMeta && t.shareMeta.at ? ` · ${fmtD(t.shareMeta.at)}에 보냄` : ''}</b>
@@ -1065,7 +1065,7 @@
           if (!armed) {
             armed = true;
             btn.classList.add('armed'); btn.textContent = '한 번 더 누르면 삭제';
-            $('#f-err', root).textContent = `'${tripName(t)}'의 일정·항공편·숙소·체크리스트·경비가 모두 지워져요.${t.cloud ? ' 가족과 함께 쓰는 여행이라 가족 모두의 앱에서 지워져요.' : ''}`;
+            $('#f-err', root).textContent = `'${tripName(t)}'의 일정·항공편·숙소·체크리스트·경비가 모두 지워져요.${t.cloud ? ' 함께 쓰는 여행이라 멤버 모두의 앱에서 지워져요.' : ''}`;
             clearTimeout(armTimer);
             armTimer = setTimeout(() => { armed = false; btn.classList.remove('armed'); btn.innerHTML = `${ICON.trash}여행 삭제`; $('#f-err', root).textContent = ''; }, 5000);
             return;
@@ -1681,14 +1681,14 @@
   function syncInfo(t) {
     const c = C();
     if (!c) return { text: '', cls: '' };
-    if (c.state === 'signedout') return { text: '가족과 함께 쓰는 여행 · 로그인하면 다시 맞춰져요', cls: 'warn' };
+    if (c.state === 'signedout') return { text: '멤버와 함께 쓰는 여행 · 로그인하면 다시 맞춰져요', cls: 'warn' };
     if (c.state === 'error') return { text: c.error, cls: 'warn' };
-    if (c.state !== 'ready') return { text: '가족 공간에 연결하는 중…', cls: '' };
-    if (!navigator.onLine) return { text: '인터넷 없음 · 연결되면 가족과 맞춰져요', cls: 'warn' };
-    if (c.syncing || (t.cloud && t.cloud.dirty)) return { text: '가족과 맞추는 중…', cls: '' };
+    if (c.state !== 'ready') return { text: '그룹에 연결하는 중…', cls: '' };
+    if (!navigator.onLine) return { text: '인터넷 없음 · 연결되면 멤버와 맞춰져요', cls: 'warn' };
+    if (c.syncing || (t.cloud && t.cloud.dirty)) return { text: '멤버와 맞추는 중…', cls: '' };
     const by = t.cloud && t.cloud.by && t.cloud.by !== c.email ? ` · 마지막 수정 ${shortName(t.cloud.by)}` : '';
-    if (locked(t)) return { text: '보기 전용 · 수정은 권한을 받은 가족만 할 수 있어요' + by, cls: '' };
-    return { text: '가족과 함께 쓰는 중 · 저장됨' + by, cls: 'ok' };
+    if (locked(t)) return { text: '보기 전용 · 수정은 권한을 받은 멤버만 할 수 있어요' + by, cls: '' };
+    return { text: '멤버와 함께 쓰는 중 · 저장됨' + by, cls: 'ok' };
   }
 
   // 가족이 고친 내용 받기. 입력 중이거나 창이 열려 있으면 끝날 때까지 미뤄요 (고치던 내용이 사라지지 않게)
@@ -1723,7 +1723,7 @@
     });
     pendingRemote.updates.clear(); pendingRemote.removed.clear();
     persist();
-    if (goneCurrent) { ui.view = 'home'; toast('가족이 이 여행을 지웠어요'); }
+    if (goneCurrent) { ui.view = 'home'; toast('멤버가 이 여행을 지웠어요'); }
     if (pendingOpen && state.trips.some(x => x.id === pendingOpen)) { stopLive(); sharedTrip = null; ui.tripId = pendingOpen; ui.view = 'trip'; ui.tab = 'plan'; pendingOpen = null; clearTripHash(); }
     render();
   }
@@ -1737,8 +1737,8 @@
     if (local) { ui.tripId = id; ui.view = 'trip'; ui.tab = 'plan'; clearTripHash(); render(); jumpToToday(); return; }
     if (!C()) return;
     pendingOpen = id; // 가족(로그인)이면 가족 공간에서 오는 대로 고칠 수 있는 화면으로 바뀌어요
-    if (!fam) { // 예전 링크(가족 번호 없음)는 가족 로그인으로만 열려요
-      C().load().then(() => { if (C().state !== 'ready') familySheet('가족과 함께 쓰는 여행이에요. 가족으로 등록된 구글 계정으로 로그인하면 열려요.'); else toast('가족 여행을 불러오는 중…'); }).catch(() => {});
+    if (!fam) { // 예전 링크(가족 번호 없음)는 멤버 로그인으로만 열려요
+      C().load().then(() => { if (C().state !== 'ready') familySheet('함께 쓰는 여행이에요. 멤버로 등록된 구글 계정으로 로그인하면 열려요.'); else toast('함께 쓰는 여행을 불러오는 중…'); }).catch(() => {});
       return;
     }
     stopLive();
@@ -1764,7 +1764,7 @@
 
   function familySheet(note) {
     const c = C(); if (!c) return;
-    openSheet('가족과 함께 쓰기', `<div id="fam-body" class="fam-body"></div>`,
+    openSheet('멤버와 함께 쓰기', `<div id="fam-body" class="fam-body"></div>`,
       `<button type="button" class="btn" data-close="1">닫기</button>`,
       (root) => {
         const body = $('#fam-body', root);
@@ -1772,10 +1772,10 @@
           const st = c.state, fam = c.family;
           const msg = c.error ? `<div class="fam-err">${esc(c.error)}</div>` : '';
           const top = note ? `<div class="fam-note">${esc(note)}</div>` : '';
-          if (st === 'off' || st === 'loading') { body.innerHTML = top + '<p class="note-small">가족 공간에 연결하는 중…</p>'; return; }
+          if (st === 'off' || st === 'loading') { body.innerHTML = top + '<p class="note-small">그룹에 연결하는 중…</p>'; return; }
           if (st === 'signedout' || (st === 'error' && !c.email)) {
             body.innerHTML = `${top}${msg}
-              <p class="fam-lead">가족으로 등록된 <b>구글 계정</b>으로 로그인하면, 같은 여행을 가족 모두 <b>실시간으로</b> 보고 고칠 수 있어요. 아이폰·아이패드도 자동으로 맞춰져요.</p>
+              <p class="fam-lead">멤버로 등록된 <b>구글 계정</b>으로 로그인하면, 같은 여행을 멤버 모두 <b>실시간으로</b> 보고, 수정 권한을 받은 멤버는 고칠 수 있어요. 아이폰·아이패드도 자동으로 맞춰져요.</p>
               <button type="button" class="btn primary" id="fam-login">구글로 로그인</button>
               <p class="note-small">처음 한 번만 로그인하면 돼요. 이 기기의 여행은 지워지지 않아요.</p>`;
             return;
@@ -1783,12 +1783,12 @@
           if (st === 'nofamily') {
             body.innerHTML = `${top}${msg}
               <div class="fam-me">로그인: <b>${esc(c.email)}</b></div>
-              <p class="fam-lead">아직 가족 공간이 없어요.</p>
+              <p class="fam-lead">아직 그룹이 없어요.</p>
               <div class="fam-box"><b>내가 만들기</b>
-                <div class="fam-row"><input type="text" id="fam-name" value="우리 가족" maxlength="30" aria-label="가족 이름"><button type="button" class="btn primary" id="fam-create">가족 공간 만들기</button></div>
+                <div class="fam-row"><input type="text" id="fam-name" value="우리 그룹" maxlength="30" aria-label="그룹 이름"><button type="button" class="btn primary" id="fam-create">그룹 만들기</button></div>
               </div>
-              <div class="fam-box"><b>가족이 이미 만들었다면</b>
-                <p class="note-small" style="margin:0">가족에게 이 이메일을 추가해 달라고 하세요: <b>${esc(c.email)}</b>. 추가되면 자동으로 들어가요.</p></div>
+              <div class="fam-box"><b>다른 멤버가 이미 만들었다면</b>
+                <p class="note-small" style="margin:0">그 멤버에게 이 이메일을 추가해 달라고 하세요: <b>${esc(c.email)}</b>. 추가되면 자동으로 들어가요.</p></div>
               <button type="button" class="btn ghost sm" id="fam-logout">로그아웃</button>`;
             return;
           }
@@ -1796,18 +1796,18 @@
             const shared = state.trips.filter(x => x.cloud && x.cloud.fam === fam.id).length;
             body.innerHTML = `${top}${msg}
               <div class="fam-me">로그인: <b>${esc(c.email)}</b></div>
-              <div class="fam-title">${ICON.users}<b>${esc(fam.name || '우리 가족')}</b><span>함께 쓰는 여행 ${shared}개</span></div>
+              <div class="fam-title">${ICON.users}<b>${esc(fam.name || '우리 그룹')}</b><span>함께 쓰는 여행 ${shared}개</span></div>
               <ul class="fam-list">${(fam.members || []).map(m => {
                 const owner = m === fam.ownerEmail, ed = owner || (fam.editors || []).includes(m);
                 return `<li><span>${esc(m)}</span>${m === c.email ? '<em>나</em>' : ''}${owner ? '<em>만든 사람</em>' : ''}
                 ${c.isOwner && !owner ? `<button type="button" class="btn sm perm-btn ${ed ? 'on' : ''}" data-perm="${esc(m)}" data-on="${ed ? '' : '1'}" aria-pressed="${ed}">${ed ? '수정 가능' : '보기만'}</button>` : !owner ? `<em class="${ed ? '' : 'ro'}">${ed ? '수정 가능' : '보기만'}</em>` : ''}
                 ${c.isOwner && m !== c.email ? `<button type="button" class="btn sm ghost" data-rm="${esc(m)}">빼기</button>` : ''}</li>`;
               }).join('')}</ul>
-              <p class="note-small" style="margin:0">여행을 고치고 지우는 건 <b>만든 사람</b>과 <b>수정 가능</b>인 가족만 할 수 있어요. 나머지는 보기만 해요.${c.isOwner ? ' 이름 옆 버튼을 누르면 바뀌어요.' : ''}</p>
-              ${c.isOwner ? `<div class="fam-row"><input type="email" id="fam-add" placeholder="가족 구글 이메일" autocomplete="off" autocapitalize="none" aria-label="추가할 가족 이메일"><button type="button" class="btn primary" id="fam-add-btn">추가</button></div>
-                <p class="note-small" style="margin:0">추가한 가족이 앱에서 그 구글 계정으로 로그인하면 바로 함께 쓸 수 있어요.</p>`
-                : '<p class="note-small" style="margin:0">가족 추가·빼기는 가족 공간을 만든 사람만 할 수 있어요.</p>'}
-              <p class="note-small" style="margin:0">여행을 올리려면 여행 화면의 <b>공유</b>에서 <b>올리고 공유하기</b>를 누르세요. 링크를 받은 사람은 누구나 볼 수 있고, 고치기는 위에서 <b>수정 가능</b>으로 바꾼 가족만 할 수 있어요.</p>
+              <p class="note-small" style="margin:0">여행을 고치고 지우는 건 <b>만든 사람</b>과 <b>수정 가능</b>인 멤버만 할 수 있어요. 나머지는 보기만 해요.${c.isOwner ? ' 이름 옆 버튼을 누르면 바뀌어요.' : ''}</p>
+              ${c.isOwner ? `<div class="fam-row"><input type="email" id="fam-add" placeholder="멤버 구글 이메일" autocomplete="off" autocapitalize="none" aria-label="추가할 멤버 이메일"><button type="button" class="btn primary" id="fam-add-btn">추가</button></div>
+                <p class="note-small" style="margin:0">추가한 멤버가 앱에서 그 구글 계정으로 로그인하면 바로 함께 쓸 수 있어요.</p>`
+                : '<p class="note-small" style="margin:0">멤버 추가·빼기는 그룹을 만든 사람만 할 수 있어요.</p>'}
+              <p class="note-small" style="margin:0">여행을 올리려면 여행 화면의 <b>공유</b>에서 <b>올리고 공유하기</b>를 누르세요. 링크를 받은 사람은 누구나 볼 수 있고, 고치기는 위에서 <b>수정 가능</b>으로 바꾼 멤버만 할 수 있어요.</p>
               <button type="button" class="btn ghost sm" id="fam-logout">로그아웃</button>`;
             return;
           }
@@ -1821,12 +1821,12 @@
           try {
             if (b.id === 'fam-login') { b.disabled = true; b.textContent = '로그인 창을 여는 중…'; await c.signIn(); }
             else if (b.id === 'fam-logout') { await c.signOut(); toast('로그아웃했어요'); }
-            else if (b.id === 'fam-create') { b.disabled = true; await c.createFamily(val(root, 'fam-name')); toast('가족 공간을 만들었어요'); }
+            else if (b.id === 'fam-create') { b.disabled = true; await c.createFamily(val(root, 'fam-name')); toast('그룹을 만들었어요'); }
             else if (b.id === 'fam-add-btn') {
               const e = val(root, 'fam-add');
               try { await c.addMember(e); toast(`${e.toLowerCase()} 추가했어요`); } catch (err) { toast(err.message === 'email' ? '이메일 주소를 확인해 주세요' : c.error || '추가하지 못했어요'); }
             } else if (b.dataset.perm) { b.disabled = true; await c.setEditor(b.dataset.perm, !!b.dataset.on); toast(b.dataset.on ? '수정 권한을 줬어요' : '보기만 하도록 바꿨어요'); }
-            else if (b.dataset.rm) { await c.removeMember(b.dataset.rm); toast('가족에서 뺐어요'); }
+            else if (b.dataset.rm) { await c.removeMember(b.dataset.rm); toast('멤버에서 뺐어요'); }
             else if (b.id === 'fam-retry') { c.load().catch(() => {}); }
           } catch (err) { /* 오류 문구는 c.error로 보여 줘요 */ }
           if (sheetRefresh) sheetRefresh();
@@ -1967,7 +1967,7 @@
     }).join('');
     return `<div class="field" style="margin-top:4px"><span>고칠 수 있는 사람 <span class="hint">${c.isOwner ? '버튼을 누르면 바뀌어요' : '권한은 만든 사람이 바꿔요'}</span></span>
       <ul class="fam-list">${rows}</ul>
-      <button type="button" class="btn sm ghost" id="f-fam" style="justify-self:start">${ICON.users}가족 추가·관리</button></div>`;
+      <button type="button" class="btn sm ghost" id="f-fam" style="justify-self:start">${ICON.users}추가·관리</button></div>`;
   }
   const famLink = t => `${location.origin}${location.pathname}#t=${t.cloud ? t.cloud.fam + '.' : ''}${t.id}`;
   function shareSheet(t) {
@@ -1980,20 +1980,20 @@
           if (!c) { fs.innerHTML = '<p class="note-small" style="margin:0">이 화면에서는 공유를 쓸 수 없어요.</p>'; return; }
           if (t.cloud) {
             fs.innerHTML = `<div class="fam-on">${ICON.cloud}<b>링크로 공유 중</b></div>
-              <p class="note-small" style="margin:0">링크를 받은 사람은 <b>누구나 볼 수 있어요</b> (로그인 없이, 일정을 바꾸면 자동으로 반영). <b>고치기</b>는 가족 공간을 만든 사람과 <b>수정 권한을 받은 가족</b>만 로그인해서 할 수 있어요.</p>
+              <p class="note-small" style="margin:0">링크를 받은 사람은 <b>누구나 볼 수 있어요</b> (로그인 없이, 일정을 바꾸면 자동으로 반영). <b>고치기</b>는 그룹을 만든 사람과 <b>수정 권한을 받은 멤버</b>만 로그인해서 할 수 있어요.</p>
               <p class="note-small" style="margin:0">링크로 보는 사람에게는 <b>항공 예약번호·숙소 예약번호·경비</b>가 보이지 않아요.</p>
               <div class="fam-row"><input type="text" id="f-link" readonly value="${esc(famLink(t))}" aria-label="공유 링크"><button type="button" class="btn" id="f-copy">복사</button></div>
               <div class="fam-row"><button type="button" class="btn primary" id="f-send">${ICON.share}카톡으로 보내기</button>${locked(t) ? '' : '<button type="button" class="btn sm ghost" id="f-off">공유 끄기</button>'}</div>
               <div class="ap-preview" id="f-msg" style="color:var(--warn)"></div>
-              ${locked(t) ? '<p class="note-small" style="margin:0">이 여행은 <b>보기 전용</b>이에요. 고치려면 가족 공간을 만든 사람에게 수정 권한을 받으세요.</p>' : ''}
+              ${locked(t) ? '<p class="note-small" style="margin:0">이 여행은 <b>보기 전용</b>이에요. 고치려면 그룹을 만든 사람에게 수정 권한을 받으세요.</p>' : ''}
               ${editorsBox(c)}`;
           } else if (c.state === 'ready' && c.canEdit(c.family.id) === false) {
-            fs.innerHTML = `<p class="note-small" style="margin:0">여행을 올려서 공유하려면 가족 공간을 만든 사람에게 <b>수정 권한</b>을 받아야 해요.</p>`;
+            fs.innerHTML = `<p class="note-small" style="margin:0">여행을 올려서 공유하려면 그룹을 만든 사람에게 <b>수정 권한</b>을 받아야 해요.</p>`;
           } else if (c.state === 'ready') {
-            fs.innerHTML = `<p class="fam-lead">이 여행을 <b>${esc(c.family.name || '우리 가족')}</b> 공간에 올리면 <b>링크 하나</b>로 공유할 수 있어요. 받은 사람은 누구나 보고, 고치기는 권한을 준 가족만 할 수 있어요.</p>
+            fs.innerHTML = `<p class="fam-lead">이 여행을 <b>${esc(c.family.name || '우리 그룹')}</b> 그룹에 올리면 <b>링크 하나</b>로 공유할 수 있어요. 받은 사람은 누구나 보고, 고치기는 권한을 준 멤버만 할 수 있어요.</p>
               <button type="button" class="btn primary" id="f-up">${ICON.users}올리고 공유하기</button>`;
           } else {
-            fs.innerHTML = `<p class="fam-lead">구글로 로그인하고 가족 공간에 여행을 올리면 <b>링크 하나</b>로 공유할 수 있어요. 일정을 바꿔도 링크를 다시 보낼 필요가 없어요.</p>
+            fs.innerHTML = `<p class="fam-lead">구글로 로그인하고 그룹에 여행을 올리면 <b>링크 하나</b>로 공유할 수 있어요. 일정을 바꿔도 링크를 다시 보낼 필요가 없어요.</p>
               <button type="button" class="btn primary" id="f-login">${ICON.users}로그인하기</button>`;
           }
         };
@@ -2016,10 +2016,10 @@
             ready();
             if (navigator.share) navigator.share({ title: tripName(t), text: `${tripName(t)} 여행 일정이에요.`, url: famLink(t) }).catch(() => {});
             else copyText(famLink(t));
-          } else if (b.id === 'f-up') { C().upload(t); persist(); render(); drawFam(); toast('가족 공간에 올렸어요'); }
+          } else if (b.id === 'f-up') { C().upload(t); persist(); render(); drawFam(); toast('그룹에 올렸어요'); }
           else if (b.id === 'f-login') { close(); familySheet(); }
           else if (b.id === 'f-off') {
-            if (!offArmed) { offArmed = true; b.classList.add('armed'); b.textContent = '한 번 더 누르면 꺼져요 (링크·가족 앱에서 사라져요)'; return; }
+            if (!offArmed) { offArmed = true; b.classList.add('armed'); b.textContent = '한 번 더 누르면 꺼져요 (링크·멤버 앱에서 사라져요)'; return; }
             C().unshare(t).catch(() => {}); persist(); render(); drawFam(); toast('이 기기에만 남기고 공유를 껐어요');
           }
         });
@@ -2191,7 +2191,7 @@
         if (!el.classList.contains('armed')) {
           app.querySelectorAll('.del-trip.armed').forEach(b => { b.classList.remove('armed'); b.innerHTML = ICON.trash; });
           el.classList.add('armed'); el.innerHTML = `${ICON.trash}삭제`;
-          toast(tr.cloud ? '가족 모두의 앱에서 지워져요. 한 번 더 누르면 삭제' : '한 번 더 누르면 여행이 지워져요');
+          toast(tr.cloud ? '멤버 모두의 앱에서 지워져요. 한 번 더 누르면 삭제' : '한 번 더 누르면 여행이 지워져요');
           clearTimeout(delTripTimer);
           delTripTimer = setTimeout(() => { el.classList.remove('armed'); el.innerHTML = ICON.trash; }, 4000);
           break;
