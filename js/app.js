@@ -1100,7 +1100,7 @@
     openSheet(isNew ? '일정 추가' : '일정 수정', `
       <div class="field"><span>종류</span><div class="type-pick">${TYPES.map(ty => `<label><input type="radio" name="f-type" value="${ty.id}" ${item.type === ty.id ? 'checked' : ''}>${ICON[ty.id]}<span>${ty.label}</span></label>`).join('')}</div></div>
       <label class="field"><span>무엇을 하나요</span><input type="text" id="f-title" value="${esc(item.title)}" placeholder="예: 유니버설 스튜디오" required></label>
-      <div class="grid3">
+      <div class="grid3 time-row">
         <label class="field"><span>날짜</span><select id="f-date">${days.map((d, i) => `<option value="${d}" ${d === item.date ? 'selected' : ''}>${i + 1}일차 ${fmtD(d)}</option>`).join('')}${days.includes(item.date) ? '' : `<option value="${esc(item.date)}" selected>${fmtD(item.date)}</option>`}</select></label>
         <label class="field"><span>시작</span>${timePick('f-time', item.time)}</label>
         <label class="field"><span>끝 <span class="hint">(선택)</span></span>${timePick('f-end', item.endTime)}</label>
@@ -1183,9 +1183,16 @@
   // 일정 시간 칸: 기본은 30분 간격 목록(00:00·00:30…), '1분 단위로 입력'을 누르면 원래의 시간 입력칸
   const HALF_HOURS = Array.from({ length: 48 }, (_, k) => `${String(Math.floor(k / 2)).padStart(2, '0')}:${k % 2 ? '30' : '00'}`);
   // after를 주면 그 시각 이후만 보여 줘요 (끝 시간은 시작 시간 다음부터). 지금 값은 항상 남겨요
-  const halfOpts = (v, after = '') => ['', ...HALF_HOURS, ...(v && !HALF_HOURS.includes(v) ? [v] : [])].sort()
-    .filter(x => !x || x === v || !after || x > after)
-    .map(x => `<option value="${x}" ${x === (v || '') ? 'selected' : ''}>${x || '--:--'}</option>`).join('');
+  const halfOpts = (v, after = '') => {
+    const list = [...HALF_HOURS, ...(v && !HALF_HOURS.includes(v) ? [v] : [])].sort().filter(x => x === v || !after || x > after);
+    const opt = x => `<option value="${x}" ${x === (v || '') ? 'selected' : ''}>${ampm(x)}</option>`;
+    const am = list.filter(x => x < '12:00'), pm = list.filter(x => x >= '12:00');
+    return `<option value="" ${v ? '' : 'selected'}>--:--</option>`
+      + (am.length ? `<optgroup label="오전">${am.map(opt).join('')}</optgroup>` : '')
+      + (pm.length ? `<optgroup label="오후">${pm.map(opt).join('')}</optgroup>` : '');
+  };
+  // 14:30 → 오후 2:30, 00:00 → 오전 12:00, 12:00 → 오후 12:00
+  const ampm = x => { const [h, m] = x.split(':').map(Number); return `${h < 12 ? '오전' : '오후'} ${h % 12 || 12}:${String(m).padStart(2, '0')}`; };
   function timePick(id, v) {
     return `<span class="time-pick"><select class="tp-sel" aria-label="시간">${halfOpts(v)}</select><input type="time" id="${id}" class="tp-native" value="${esc(v || '')}"></span>`;
   }
