@@ -101,6 +101,20 @@
 
   function stopTrips() { if (tripsUnsub) { tripsUnsub(); tripsUnsub = null; } }
   function tripsCol(fam) { return db.collection('families').doc(fam).collection('trips'); }
+  // 링크로 보는 사람용 사본 (로그인 없이 문서 번호를 아는 사람만 읽어요, firestore.rules)
+  function pubCol(fam) { return db.collection('families').doc(fam).collection('public'); }
+  // 링크가 퍼져도 안전하게: 항공 예약번호·숙소 예약번호·경비는 빼요
+  function publicCopy(t) {
+    const c = payload(t);
+    (c.flights || []).forEach(f => { f.pnr = ''; });
+    (c.stays || []).forEach(s => { s.confirmNo = ''; });
+    c.expenses = [];
+    return c;
+  }
+  function publish(t) {
+    if (!db || !t.cloud) return Promise.resolve();
+    return pubCol(t.cloud.fam).doc(t.id).set({ trip: publicCopy(t), updatedAt: window.firebase.firestore.FieldValue.serverTimestamp() });
+  }
 
   function startTrips() {
     stopTrips();
@@ -153,7 +167,7 @@
       tripsCol(family.id).doc(t.id).set({
         trip: JSON.parse(body), rev, updatedBy: myEmail(),
         updatedAt: window.firebase.firestore.FieldValue.serverTimestamp()
-      }).then(() => { pendingWrites--; if (t.cloud) delete t.cloud.dirty; App().persist(); emit(); })
+      }).then(() => { pendingWrites--; if (t.cloud) delete t.cloud.dirty; App().persist(); emit(); publish(t).catch(() => { /* 규칙을 아직 안 바꿨으면 링크 보기만 안 돼요 */ }); })
         .catch(err => { pendingWrites--; lastPushed[t.id] = ''; setState('error', explain(err)); });
     }, now ? 0 : 700);
   }
@@ -225,11 +239,24 @@
       if (canEdit(t.cloud && t.cloud.fam) === false) return;
       const fam = t.cloud && t.cloud.fam;
       delete t.cloud;
-      if (fam && db) await tripsCol(fam).doc(t.id).delete();
+      if (fam && db) { pubCol(fam).doc(t.id).delete().catch(() => {}); await tripsCol(fam).doc(t.id).delete(); }
+    },
+    // 링크를 보내기 전에 보기용 사본을 지금 내용으로 올려요
+    publish(t) { return load().then(() => publish(t)); },
+    // 링크로 연 여행 보기 (로그인 없이). 바뀌면 다시 불러요. 그만 볼 때 쓰는 함수를 돌려줘요
+    async watchPublic(fam, id, onData, onErr) {
+      await load();
+      return pubCol(fam).doc(id).onSnapshot(snap => onData(snap.exists ? snap.data() : null), err => onErr && onErr(err));
     },
     // 이 기기에서 고친 여행을 보내요 (app.js의 save()가 불러요)
     onLocalSave(trips) { if (state === 'ready') trips.forEach(t => { if (t.cloud) push(t); }); },
-    removeTrip(t) { if (canEdit(t.cloud && t.cloud.fam) === false) return; if (db && t.cloud && family && t.cloud.fam === family.id) tripsCol(family.id).doc(t.id).delete().catch(err => setState('error', explain(err))); },
+    removeTrip(t) {
+      if (canEdit(t.cloud && t.cloud.fam) === false) return;
+      if (db && t.cloud && family && t.cloud.fam === family.id) {
+        pubCol(family.id).doc(t.id).delete().catch(() => {});
+        tripsCol(family.id).doc(t.id).delete().catch(err => setState('error', explain(err)));
+      }
+    },
 
     // 개발용: 에뮬레이터에서만 가짜 구글 계정으로 로그인
     async _testSignIn(email) {

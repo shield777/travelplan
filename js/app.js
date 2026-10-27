@@ -231,6 +231,7 @@
   let selItem = null; // 순서를 옮기려고 체크한 일정 id
   let sharedTrip = null; // 공유 링크로 받아서 아직 저장하지 않은 여행
   let sharedLink = '';
+  let sharedLive = null; // 링크(#t=가족.여행)로 보고 있는 가족 여행 { fam, id, stop }
   const shared = () => ui.view === 'shared'; // 공유 링크로 받은 여행을 보는 중인지
   // 가족 공유 여행인데 나에게 수정 권한이 없으면 잠가요 (권한은 가족 공간을 만든 사람이 줘요)
   const locked = t => !!(t && t.cloud && window.TPCloud && window.TPCloud.canEdit(t.cloud.fam) === false);
@@ -473,7 +474,7 @@
           <div class="grow"></div>
           <button class="btn sm" data-act="pdf">${ICON.doc}PDF</button>
           ${shared()
-            ? `<button class="btn primary sm" data-act="save-shared">${ICON.save}내 앱에 저장</button>`
+            ? (sharedLive ? `<button class="btn sm" data-act="family">${ICON.users}가족 로그인</button>` : `<button class="btn primary sm" data-act="save-shared">${ICON.save}내 앱에 저장</button>`)
             : `<button class="btn sm" data-act="share">${ICON.share}공유</button>${ro() ? '' : `<button class="btn sm" data-act="edit-trip">${ICON.edit}여행 정보</button>`}`}
         </header>
         <section class="trip-head">
@@ -485,7 +486,11 @@
           </div>
           <span class="dchip ${dd.cls}">${dd.text}</span>
         </section>
-        ${shared() ? `<div class="shared-banner">
+        ${shared() && sharedLive ? `<div class="shared-banner">
+          <b>공유받은 일정 · 보기 전용</b>
+          <span>보낸 사람이 일정을 바꾸면 <b>자동으로 반영</b>돼요. 수정 권한을 받은 가족은 <b>가족 로그인</b>을 하면 고칠 수 있어요.</span>
+        </div>` : ''}
+        ${shared() && !sharedLive ? `<div class="shared-banner">
           <b>공유받은 일정 · 보기 전용${t.shareMeta && t.shareMeta.at ? ` · ${fmtD(t.shareMeta.at)}에 보냄` : ''}</b>
           <span>보낸 사람이 일정을 바꾸면 새 링크를 다시 받아야 해요.${standalone() ? '' : ' 홈 화면의 여행일정 앱에 넣으려면 링크를 복사한 뒤, 앱의 <b>불러오기</b>에 붙여넣으세요.'}</span>
           ${standalone() || !sharedLink ? '' : `<button class="btn sm" data-act="copy-shared">링크 복사</button>`}
@@ -559,7 +564,7 @@
   // 여행 중이면 일정 탭을 열 때 오늘 일차 제목 바로 아래에 진행 중인 일정이 오게 해요
   // (일차 제목은 위에 붙어 있어서, 앞의 일정을 지나쳐도 몇 일차인지 보여요)
   function jumpToToday() {
-    if (ui.view !== 'trip' || (ui.tab || 'plan') !== 'plan') return false;
+    if ((ui.view !== 'trip' && ui.view !== 'shared') || (ui.tab || 'plan') !== 'plan') return false;
     const el = $('#day-' + todayStr()); if (!el) return false;
     el.scrollIntoView({ block: 'start' });
     const tabs = app.querySelector('.tabs'), head = el.querySelector('.day-head');
@@ -1623,6 +1628,8 @@
       (root, close) => {
         $('#b-open', root).addEventListener('click', () => {
           const text = val(root, 'b-link'); const m = text.match(SHARE_RE);
+          const tl = text.match(/#t=(?:([A-Za-z0-9]{10,40})\.)?([A-Za-z0-9_-]{4,40})/); // 공유 링크(#t=)도 열어요
+          if (!m && tl) { close(); openTripHash(tl[2], tl[1]); return; }
           if (!m) { $('#b-msg', root).textContent = '공유 링크를 찾지 못했어요. 링크 전체를 붙여넣었는지 확인하세요.'; return; }
           const url = (text.match(/https?:\/\/\S+/) || [])[0] || '';
           openShared(m[1], url);
@@ -1717,7 +1724,7 @@
     pendingRemote.updates.clear(); pendingRemote.removed.clear();
     persist();
     if (goneCurrent) { ui.view = 'home'; toast('가족이 이 여행을 지웠어요'); }
-    if (pendingOpen && state.trips.some(x => x.id === pendingOpen)) { ui.tripId = pendingOpen; ui.view = 'trip'; ui.tab = 'plan'; pendingOpen = null; clearTripHash(); }
+    if (pendingOpen && state.trips.some(x => x.id === pendingOpen)) { stopLive(); sharedTrip = null; ui.tripId = pendingOpen; ui.view = 'trip'; ui.tab = 'plan'; pendingOpen = null; clearTripHash(); }
     render();
   }
   app.addEventListener('focusout', () => setTimeout(flushRemote, 0));
@@ -1725,13 +1732,35 @@
   window.addEventListener('offline', () => render());
 
   function clearTripHash() { if (/^#t=/.test(location.hash)) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* 무시 */ } } }
-  function openTripHash(id) {
+  function openTripHash(id, fam) {
     const local = state.trips.find(x => x.id === id);
     if (local) { ui.tripId = id; ui.view = 'trip'; ui.tab = 'plan'; clearTripHash(); render(); jumpToToday(); return; }
     if (!C()) return;
-    pendingOpen = id;
-    C().load().then(() => { if (C().state !== 'ready') familySheet('가족과 함께 쓰는 여행이에요. 가족으로 등록된 구글 계정으로 로그인하면 열려요.'); else toast('가족 여행을 불러오는 중…'); }).catch(() => {});
+    pendingOpen = id; // 가족(로그인)이면 가족 공간에서 오는 대로 고칠 수 있는 화면으로 바뀌어요
+    if (!fam) { // 예전 링크(가족 번호 없음)는 가족 로그인으로만 열려요
+      C().load().then(() => { if (C().state !== 'ready') familySheet('가족과 함께 쓰는 여행이에요. 가족으로 등록된 구글 계정으로 로그인하면 열려요.'); else toast('가족 여행을 불러오는 중…'); }).catch(() => {});
+      return;
+    }
+    stopLive();
+    let first = true;
+    const live = { fam, id, stop: null };
+    sharedLive = live;
+    C().watchPublic(fam, id, data => {
+      if (sharedLive !== live) return;
+      if (!data || !data.trip) {
+        toast(first ? '일정을 찾을 수 없어요. 링크를 보낸 사람에게 다시 받아 주세요.' : '공유가 꺼졌어요.');
+        if (!first) closeShared();
+        return;
+      }
+      const wasFirst = first; first = false;
+      sharedTrip = normalizeTrip(data.trip); sharedTrip.id = id; sharedLink = '';
+      if (pendingOpen !== id && state.trips.some(x => x.id === id)) return;
+      if (wasFirst) { if (sheetClose) sheetClose(); ui.view = 'shared'; ui.tab = 'plan'; render(); if (!jumpToToday()) window.scrollTo(0, 0); }
+      else if (ui.view === 'shared') { if (!busy()) render(); else needRender = true; }
+    }, () => { if (sharedLive === live && first) toast('일정을 열 수 없어요. 인터넷 연결을 확인하거나 링크를 다시 받아 주세요.'); })
+      .then(stop => { if (sharedLive === live) live.stop = stop; else stop(); }).catch(() => toast('일정을 열 수 없어요. 인터넷 연결을 확인해 주세요.'));
   }
+  function stopLive() { if (sharedLive) { if (sharedLive.stop) sharedLive.stop(); sharedLive = null; } }
 
   function familySheet(note) {
     const c = C(); if (!c) return;
@@ -1778,7 +1807,7 @@
               ${c.isOwner ? `<div class="fam-row"><input type="email" id="fam-add" placeholder="가족 구글 이메일" autocomplete="off" autocapitalize="none" aria-label="추가할 가족 이메일"><button type="button" class="btn primary" id="fam-add-btn">추가</button></div>
                 <p class="note-small" style="margin:0">추가한 가족이 앱에서 그 구글 계정으로 로그인하면 바로 함께 쓸 수 있어요.</p>`
                 : '<p class="note-small" style="margin:0">가족 추가·빼기는 가족 공간을 만든 사람만 할 수 있어요.</p>'}
-              <p class="note-small" style="margin:0">여행을 가족과 함께 쓰려면 여행 화면의 <b>공유</b>에서 <b>가족과 함께 쓰기</b>를 누르세요.</p>
+              <p class="note-small" style="margin:0">여행을 올리려면 여행 화면의 <b>공유</b>에서 <b>올리고 공유하기</b>를 누르세요. 링크를 받은 사람은 누구나 볼 수 있고, 고치기는 위에서 <b>수정 가능</b>으로 바꾼 가족만 할 수 있어요.</p>
               <button type="button" class="btn ghost sm" id="fam-logout">로그아웃</button>`;
             return;
           }
@@ -1827,50 +1856,12 @@
   // ───────── 공유 링크 ─────────
   // 일정 전체를 압축해서 주소의 # 뒤에 담아요. # 뒤는 서버로 전송되지 않아서 일정이 어디에도 저장되지 않아요.
   const SHARE_RE = /(?:#s=)?([01]\.[A-Za-z0-9_-]{10,})/;
-  const b64u = bytes => {
-    let s = '';
-    for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  };
   const unb64u = str => {
     const s = atob(str.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((str.length + 3) % 4));
     const b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return b;
   };
   const pipeBytes = async (bytes, stream) => new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer());
 
-  // 링크를 짧게: 빈 값은 빼고(받는 쪽에서 기본값으로 채워요), 일정·숙소·체크리스트·경비 id는 짧은 번호로 바꿔요
-  // (여행 id와 항공편 id는 '내 앱에 저장'할 때 같은 여행·예약번호를 찾는 데 써서 그대로 둬요)
-  function compactForShare(trip) {
-    const c = JSON.parse(JSON.stringify(trip));
-    const map = {}; let n = 0;
-    const short = o => { if (o && o.id) { map[o.id] = (n++).toString(36); o.id = map[o.id]; } };
-    ['items', 'stays', 'checklist', 'expenses'].forEach(k => (c[k] || []).forEach(short));
-    (c.expenses || []).forEach(e => { if (e.itemId && map[e.itemId]) e.itemId = map[e.itemId]; });
-    (c.checklist || []).forEach(x => { if (x.tour) { if (map[x.tour]) x.tour = map[x.tour]; else delete x.tour; } });
-    const strip = v => {
-      if (Array.isArray(v)) return v.map(strip);
-      if (v && typeof v === 'object') {
-        const o = {};
-        Object.entries(v).forEach(([k, x]) => {
-          x = strip(x);
-          if (x === '' || x === null || x === undefined || x === false) return;
-          if (Array.isArray(x) && !x.length) return;
-          if (x && typeof x === 'object' && !Array.isArray(x) && !Object.keys(x).length) return;
-          o[k] = x;
-        });
-        return o;
-      }
-      return v;
-    };
-    return strip(c);
-  }
-  async function encodeShare(trip) {
-    const bytes = new TextEncoder().encode(JSON.stringify({ v: 1, trip: compactForShare(trip) }));
-    if (window.CompressionStream) {
-      try { return '1.' + b64u(await pipeBytes(bytes, new CompressionStream('deflate-raw'))); } catch (e) { /* 압축 없이 */ }
-    }
-    return '0.' + b64u(bytes);
-  }
   async function decodeShare(code) {
     if (code.length > 300000) throw new Error('too-long');
     const [kind, body] = [code[0], code.slice(2)];
@@ -1881,16 +1872,6 @@
     }
     return JSON.parse(new TextDecoder().decode(bytes));
   }
-  function shareable(t, o) {
-    const c = JSON.parse(JSON.stringify(t));
-    delete c.receivedAt;
-    if (!o.pnr) (c.flights || []).forEach(f => { f.pnr = ''; });
-    if (!o.check) c.checklist = [];
-    if (!o.exp) { c.expenses = []; c.rates = {}; }
-    c.shareMeta = { pnr: !!o.pnr, check: !!o.check, exp: !!o.exp, at: todayStr() };
-    return c;
-  }
-
   // 다른 사람이 만든 데이터라서, 화면에 넣기 전에 형식을 하나하나 확인해요
   function normalizeTrip(t) {
     t = t && typeof t === 'object' ? t : {};
@@ -1936,7 +1917,7 @@
   function clearShareHash() {
     if (SHARE_RE.test(location.hash)) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* 무시 */ } }
   }
-  function closeShared() { sharedTrip = null; ui.view = 'home'; clearShareHash(); render(); window.scrollTo(0, 0); }
+  function closeShared() { stopLive(); pendingOpen = null; sharedTrip = null; ui.view = 'home'; clearShareHash(); clearTripHash(); render(); window.scrollTo(0, 0); }
   function saveShared() {
     const t = JSON.parse(JSON.stringify(sharedTrip));
     // 링크 안의 짧은 번호 id는 기기 안에서 새 id로 바꿔요 (연결된 경비도 함께)
@@ -1971,119 +1952,58 @@
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => toast('링크를 복사했어요'), fallback); else fallback();
   }
 
-  // is.gd로 링크 줄이기. 브라우저에서 바로 부를 수 있는 JSONP 방식을 써요
-  function shortenUrl(url) {
-    return new Promise((resolve, reject) => {
-      if (url.length > 4900) { reject(new Error('too-long')); return; }
-      const cb = '__isgd' + Date.now();
-      const sc = document.createElement('script');
-      const done = () => { delete window[cb]; sc.remove(); clearTimeout(timer); };
-      const timer = setTimeout(() => { done(); reject(new Error('timeout')); }, 10000);
-      window[cb] = res => {
-        done();
-        if (res && typeof res.shorturl === 'string' && /^https:\/\/is\.gd\/[A-Za-z0-9_]+$/.test(res.shorturl)) resolve(res.shorturl);
-        else reject(new Error((res && res.errormessage) || 'fail'));
-      };
-      sc.src = `https://is.gd/create.php?format=json&logstats=0&callback=${cb}&url=${encodeURIComponent(url)}`;
-      sc.onerror = () => { done(); reject(new Error('network')); };
-      document.head.appendChild(sc);
-    });
-  }
-
+  // 공유: 링크 하나로 보내요. 링크를 받은 사람은 누구나 볼 수 있고(로그인 없이, 바뀌면 자동 반영),
+  // 고치기는 가족 공간을 만든 사람과 수정 권한을 받은 가족만 (로그인 후)
+  const famLink = t => `${location.origin}${location.pathname}#t=${t.cloud ? t.cloud.fam + '.' : ''}${t.id}`;
   function shareSheet(t) {
-    let link = '';
-    openSheet('가족에게 일정 공유', `
-      ${C() ? `<div class="fam-share" id="fam-share"></div><div class="share-divider">가족이 아닌 사람에게 보내기 · 보기 전용 링크</div>` : ''}
-      <p class="note-small" style="margin:0">링크를 받은 사람은 앱을 설치하지 않아도 바로 일정을 볼 수 있어요. <b>보내는 시점의 일정</b>이 담기니, 일정을 바꾼 뒤에는 링크를 다시 보내 주세요.</p>
-      <div class="field"><span>함께 보낼 내용</span>
-        <label class="check-inline"><input type="checkbox" id="s-check" checked> 준비 체크리스트 (체크 상태 포함)</label>
-        <label class="check-inline"><input type="checkbox" id="s-exp"> 경비 내역</label>
-        <label class="check-inline"><input type="checkbox" id="s-pnr"> 항공 예약번호</label>
-        <div class="note-small">예약번호는 이름과 함께 있으면 예약 변경·취소에 쓰일 수 있어서 기본으로 빼 뒀어요.</div>
-      </div>
-      <label class="field"><span>공유 링크 <span class="hint" id="s-len"></span></span><input type="text" id="s-link" readonly value="만드는 중…"></label>
-      <div class="short-box">
-        <button type="button" class="btn sm" id="s-short" disabled>짧은 링크 만들기</button>
-        <span class="note-small">is.gd(무료 링크 줄이기 서비스)에 일정이 담긴 링크가 저장돼요. 짧은 링크를 아는 사람은 누구나 열 수 있어요.</span>
-      </div>
-      <div class="ap-preview" id="s-msg"></div>`,
-      `<button type="button" class="btn" id="s-copy" disabled>링크 복사</button><button type="submit" class="btn primary" disabled>${ICON.share}카톡·메시지로 보내기</button>`,
+    openSheet('일정 공유', `<div class="fam-share" id="fam-share"></div>`,
+      `<button type="button" class="btn" data-close="1">닫기</button>`,
       (root, close) => {
         const fs = $('#fam-share', root);
-        const famLink = () => `${location.origin}${location.pathname}#t=${t.id}`;
         const drawFam = () => {
-          if (!fs) return;
           const c = C();
+          if (!c) { fs.innerHTML = '<p class="note-small" style="margin:0">이 화면에서는 공유를 쓸 수 없어요.</p>'; return; }
           if (t.cloud) {
-            fs.innerHTML = `<div class="fam-on">${ICON.cloud}<b>가족과 함께 쓰는 중</b></div>
-              <p class="note-small" style="margin:0">가족 모두 이 여행을 실시간으로 보고 고칠 수 있어요. 아래 링크는 <b>가족으로 등록된 사람만</b> 열려요.</p>
-              <div class="fam-row"><input type="text" id="f-link" readonly value="${esc(famLink())}" aria-label="가족 링크"><button type="button" class="btn" id="f-copy">복사</button></div>
-              <div class="fam-row"><button type="button" class="btn primary" id="f-send">${ICON.share}카톡으로 가족에게 보내기</button>${locked(t) ? '' : '<button type="button" class="btn sm ghost" id="f-off">함께 쓰기 끄기</button>'}</div>
+            fs.innerHTML = `<div class="fam-on">${ICON.cloud}<b>링크로 공유 중</b></div>
+              <p class="note-small" style="margin:0">링크를 받은 사람은 <b>누구나 볼 수 있어요</b> (로그인 없이, 일정을 바꾸면 자동으로 반영). <b>고치기</b>는 가족 공간을 만든 사람과 <b>수정 권한을 받은 가족</b>만 로그인해서 할 수 있어요.</p>
+              <p class="note-small" style="margin:0">링크로 보는 사람에게는 <b>항공 예약번호·숙소 예약번호·경비</b>가 보이지 않아요.</p>
+              <div class="fam-row"><input type="text" id="f-link" readonly value="${esc(famLink(t))}" aria-label="공유 링크"><button type="button" class="btn" id="f-copy">복사</button></div>
+              <div class="fam-row"><button type="button" class="btn primary" id="f-send">${ICON.share}카톡으로 보내기</button>${locked(t) ? '' : '<button type="button" class="btn sm ghost" id="f-off">공유 끄기</button>'}</div>
+              <div class="ap-preview" id="f-msg" style="color:var(--warn)"></div>
               ${locked(t) ? '<p class="note-small" style="margin:0">이 여행은 <b>보기 전용</b>이에요. 고치려면 가족 공간을 만든 사람에게 수정 권한을 받으세요.</p>' : ''}`;
           } else if (c.state === 'ready' && c.canEdit(c.family.id) === false) {
-            fs.innerHTML = `<p class="note-small" style="margin:0">가족 공간에 여행을 올리려면 가족 공간을 만든 사람에게 <b>수정 권한</b>을 받아야 해요.</p>`;
+            fs.innerHTML = `<p class="note-small" style="margin:0">여행을 올려서 공유하려면 가족 공간을 만든 사람에게 <b>수정 권한</b>을 받아야 해요.</p>`;
           } else if (c.state === 'ready') {
-            fs.innerHTML = `<p class="fam-lead">이 여행을 <b>${esc(c.family.name || '우리 가족')}</b>과 함께 쓸까요? 가족 모두 실시간으로 보고 고칠 수 있고, 짧은 링크로 보낼 수 있어요.</p>
-              <button type="button" class="btn primary" id="f-up">${ICON.users}가족과 함께 쓰기</button>`;
+            fs.innerHTML = `<p class="fam-lead">이 여행을 <b>${esc(c.family.name || '우리 가족')}</b> 공간에 올리면 <b>링크 하나</b>로 공유할 수 있어요. 받은 사람은 누구나 보고, 고치기는 권한을 준 가족만 할 수 있어요.</p>
+              <button type="button" class="btn primary" id="f-up">${ICON.users}올리고 공유하기</button>`;
           } else {
-            fs.innerHTML = `<p class="fam-lead">구글 로그인으로 <b>가족과 함께 쓰기</b>를 켜면, 일정을 바꿔도 링크를 다시 보낼 필요가 없고 링크도 짧아져요.</p>
-              <button type="button" class="btn primary" id="f-login">${ICON.users}가족 로그인하기</button>`;
+            fs.innerHTML = `<p class="fam-lead">구글로 로그인하고 가족 공간에 여행을 올리면 <b>링크 하나</b>로 공유할 수 있어요. 일정을 바꿔도 링크를 다시 보낼 필요가 없어요.</p>
+              <button type="button" class="btn primary" id="f-login">${ICON.users}로그인하기</button>`;
           }
         };
         drawFam();
-        if (fs) {
-          sheetRefresh = drawFam;
-          C().load().catch(() => {});
-          let offArmed = false;
-          fs.addEventListener('click', ev => {
-            const b = ev.target.closest('button'); if (!b) return;
-            if (b.id === 'f-copy') copyText(famLink());
-            else if (b.id === 'f-send') {
-              if (navigator.share) navigator.share({ title: tripName(t), text: `${tripName(t)} 여행 일정이에요. (가족 공유)`, url: famLink() }).catch(() => {});
-              else copyText(famLink());
-            } else if (b.id === 'f-up') { C().upload(t); persist(); render(); drawFam(); toast('가족과 함께 쓰기 시작했어요'); }
-            else if (b.id === 'f-login') { close(); familySheet(); }
-            else if (b.id === 'f-off') {
-              if (!offArmed) { offArmed = true; b.classList.add('armed'); b.textContent = '한 번 더 누르면 꺼져요 (가족 앱에서는 사라져요)'; return; }
-              C().unshare(t).catch(() => {}); persist(); render(); drawFam(); toast('이 기기에만 남기고 가족 공유를 껐어요');
-            }
-          });
-        }
-        const btns = root.querySelectorAll('#s-copy, button[type=submit]');
-        const gen = async () => {
-          btns.forEach(b => { b.disabled = true; }); $('#s-short', root).disabled = true;
-          const code = await encodeShare(shareable(t, { check: $('#s-check', root).checked, pnr: $('#s-pnr', root).checked, exp: $('#s-exp', root).checked }));
-          link = `${location.origin}${location.pathname}#s=${code}`;
-          $('#s-link', root).value = link;
-          $('#s-len', root).textContent = `(${link.length.toLocaleString()}자)`;
-          $('#s-short', root).disabled = false; $('#s-short', root).textContent = '짧은 링크 만들기';
-          const msgs = [];
-          if (IN_FRAME) msgs.push('미리보기 화면에서 만든 링크는 가족이 열 수 없어요. 실제 앱 주소에 올린 뒤에 보내세요. (복사해서 불러오기에 붙여넣으면 받는 화면은 미리 볼 수 있어요)');
-          if (link.length > 6000) msgs.push(`링크가 길어요(${link.length.toLocaleString()}자). 일부 앱에서 잘릴 수 있으니 체크리스트를 빼거나 PDF로 보내 보세요.`);
-          $('#s-msg', root).textContent = msgs.join(' ');
-          btns.forEach(b => { b.disabled = false; });
-        };
-        root.addEventListener('change', e => { if (e.target.type === 'checkbox') gen(); });
-        gen();
-        $('#s-link', root).addEventListener('focus', e => e.target.select());
-        $('#s-copy', root).addEventListener('click', () => copyText(link));
-        $('#s-short', root).addEventListener('click', async ev => {
-          const b = ev.currentTarget; b.disabled = true; b.textContent = '만드는 중…';
-          try {
-            link = await shortenUrl(link);
-            $('#s-link', root).value = link; $('#s-len', root).textContent = `(${link.length}자)`;
-            b.textContent = '짧은 링크 완성';
-          } catch (err) {
-            b.disabled = false; b.textContent = '짧은 링크 만들기';
-            $('#s-msg', root).textContent = err.message === 'too-long'
-              ? '일정이 많아 짧은 링크를 만들 수 없어요(is.gd는 5,000자까지). 체크리스트나 경비를 빼고 다시 해 보세요.'
-              : '짧은 링크를 만들지 못했어요. 인터넷 연결을 확인하거나 긴 링크를 그대로 보내세요.';
-          }
+        if (!C()) return;
+        sheetRefresh = drawFam;
+        C().load().catch(() => {});
+        // 링크를 보내기 전에 보기용 사본을 지금 내용으로 올려요 (규칙을 아직 안 바꿨으면 알려 줘요)
+        const ready = () => C().publish(t).then(() => true, err => {
+          const m = $('#f-msg', root); if (m) m.textContent = err && err.code === 'permission-denied' ? 'Firebase 규칙을 새로 게시해야 링크로 볼 수 있어요 (docs/FIREBASE_SETUP.md).' : '인터넷 연결을 확인해 주세요. 연결되면 링크로 볼 수 있어요.';
+          return false;
         });
-        $('#sheet-form', root).addEventListener('submit', e => {
-          e.preventDefault();
-          if (navigator.share) navigator.share({ title: tripName(t), text: `${tripName(t)} 여행 일정이에요.`, url: link }).catch(err => { if (err && err.name !== 'AbortError') copyText(link); });
-          else copyText(link);
+        let offArmed = false;
+        fs.addEventListener('click', async ev => {
+          const b = ev.target.closest('button'); if (!b) return;
+          if (b.id === 'f-copy') { copyText(famLink(t)); ready(); }
+          else if (b.id === 'f-send') {
+            ready();
+            if (navigator.share) navigator.share({ title: tripName(t), text: `${tripName(t)} 여행 일정이에요.`, url: famLink(t) }).catch(() => {});
+            else copyText(famLink(t));
+          } else if (b.id === 'f-up') { C().upload(t); persist(); render(); drawFam(); toast('가족 공간에 올렸어요'); }
+          else if (b.id === 'f-login') { close(); familySheet(); }
+          else if (b.id === 'f-off') {
+            if (!offArmed) { offArmed = true; b.classList.add('armed'); b.textContent = '한 번 더 누르면 꺼져요 (링크·가족 앱에서 사라져요)'; return; }
+            C().unshare(t).catch(() => {}); persist(); render(); drawFam(); toast('이 기기에만 남기고 공유를 껐어요');
+          }
         });
       });
   }
@@ -2227,7 +2147,7 @@
     if (e.target.closest('[data-stop]')) return;
     const el = e.target.closest('[data-act]'); if (!el) return;
     const act = el.dataset.act, id = el.dataset.id, t = curTrip();
-    if (shared() && (act === 'family' || act === 'share')) return;
+    if (shared() && (act === 'share' || (act === 'family' && !sharedLive))) return;
     if (ro() && ['del-trip', 'move-sel', 'sel-done', 'move-day', 'del-item', 'add-stay', 'edit-stay', 'edit-trip', 'add-item', 'edit-item', 'day-title', 'add-flight', 'edit-flight', 'edit-check', 'del-check', 'add-exp', 'edit-exp', 'edit-rate', 'fetch-rates'].includes(act)) return;
     switch (act) {
       case 'add-exp': expSheet(t, null); break;
@@ -2346,7 +2266,7 @@
   requestAnimationFrame(() => jumpToToday()); // 앱을 열 때 여행 중이면 오늘 일정부터
   const openFromHash = () => {
     const m = location.hash.match(/^#s=([01]\.[A-Za-z0-9_-]+)$/); if (m) { openShared(m[1], location.href); return; }
-    const t = location.hash.match(/^#t=([A-Za-z0-9_-]{4,40})$/); if (t) openTripHash(t[1]);
+    const t = location.hash.match(/^#t=(?:([A-Za-z0-9]{10,40})\.)?([A-Za-z0-9_-]{4,40})$/); if (t) openTripHash(t[2], t[1]);
   };
   if (window.TPCloud) window.TPCloud.autoStart();
   openFromHash();
