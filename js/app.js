@@ -1943,6 +1943,16 @@
     if (ex) confirmSheet('이미 저장된 여행이에요. 받은 일정으로 바꿀까요? 이 기기에서 고친 내용은 사라져요.', '바꾸기', doSave); else doSave();
   }
 
+  // 이 앱을 지인에게 알려 주기 (여행 링크가 아니라 앱 주소 + 사용 안내)
+  function shareApp() {
+    const url = location.origin + location.pathname.replace(/index\.html$/, '');
+    const text = `여행 일정 앱이야. 설치 없이 무료로 쓸 수 있어.
+1) 아이폰은 Safari로 열고 공유 → '홈 화면에 추가' (안드로이드는 Chrome ⋮ → '홈 화면에 추가')
+2) 처음에 보이는 오사카 예시는 '예시 지우기'로 지우고 '새 여행'으로 만들면 돼
+3) 일행이랑 같이 쓰려면 위쪽 사람 모양 버튼 → 구글 로그인 → 그룹 만들기 → 일행 이메일 추가`;
+    if (navigator.share) navigator.share({ title: '여행일정', text, url }).catch(err => { if (err && err.name !== 'AbortError') copyText(`${text}\n${url}`); });
+    else copyText(`${text}\n${url}`);
+  }
   function copyText(text) {
     const fallback = () => {
       const ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
@@ -1957,7 +1967,7 @@
   // 공유 창 아래: 고칠 수 있는 사람 목록 (만든 사람은 여기서 바로 권한을 바꿔요)
   function editorsBox(c) {
     const fam = c.family;
-    if (c.state !== 'ready' || !fam) return '<p class="note-small" style="margin:0">로그인하면 고칠 수 있는 사람 목록이 보여요.</p>';
+    if (c.state !== 'ready' || !fam) return '<p class="note-small" style="margin:0">로그인하면 고칠 수 있는 사람 목록이 보여요.</p>' + APP_SHARE;
     const rows = (fam.members || []).map(m => {
       const owner = m === fam.ownerEmail, ed = owner || (fam.editors || []).includes(m);
       const tag = owner ? '<em>만든 사람</em>' : c.isOwner
@@ -1967,8 +1977,11 @@
     }).join('');
     return `<div class="field" style="margin-top:4px"><span>고칠 수 있는 사람 <span class="hint">${c.isOwner ? '버튼을 누르면 바뀌어요' : '권한은 만든 사람이 바꿔요'}</span></span>
       <ul class="fam-list">${rows}</ul>
-      <button type="button" class="btn sm ghost" id="f-fam" style="justify-self:start">${ICON.users}추가·관리</button></div>`;
+      <div class="share-btns"><button type="button" class="btn sm ghost" id="f-fam">${ICON.users}추가·관리</button>${APP_BTN}</div></div>`;
   }
+  // 새로 공유: 이 여행이 아니라 앱 주소와 사용법을 보내요 (함께 가지 않는 지인에게)
+  const APP_BTN = `<button type="button" class="btn sm ghost" id="f-app" aria-label="이 앱을 지인에게 새로 공유">${ICON.share}새로 공유</button>`;
+  const APP_SHARE = `<div class="share-btns">${APP_BTN}</div>`;
   const famLink = t => `${location.origin}${location.pathname}#t=${t.cloud ? t.cloud.fam + '.' : ''}${t.id}`;
   function shareSheet(t) {
     openSheet('일정 공유', `<div class="fam-share" id="fam-share"></div>`,
@@ -1988,13 +2001,13 @@
               ${locked(t) ? '<p class="note-small" style="margin:0">이 여행은 <b>보기 전용</b>이에요. 고치려면 그룹을 만든 사람에게 수정 권한을 받으세요.</p>' : ''}
               ${editorsBox(c)}`;
           } else if (c.state === 'ready' && c.canEdit(c.family.id) === false) {
-            fs.innerHTML = `<p class="note-small" style="margin:0">여행을 올려서 공유하려면 그룹을 만든 사람에게 <b>수정 권한</b>을 받아야 해요.</p>`;
+            fs.innerHTML = `<p class="note-small" style="margin:0">여행을 올려서 공유하려면 그룹을 만든 사람에게 <b>수정 권한</b>을 받아야 해요.</p>${APP_SHARE}`;
           } else if (c.state === 'ready') {
             fs.innerHTML = `<p class="fam-lead">이 여행을 <b>${esc(c.family.name || '우리 그룹')}</b> 그룹에 올리면 <b>링크 하나</b>로 공유할 수 있어요. 받은 사람은 누구나 보고, 고치기는 권한을 준 멤버만 할 수 있어요.</p>
-              <button type="button" class="btn primary" id="f-up">${ICON.users}올리고 공유하기</button>`;
+              <button type="button" class="btn primary" id="f-up">${ICON.users}올리고 공유하기</button>${APP_SHARE}`;
           } else {
             fs.innerHTML = `<p class="fam-lead">구글로 로그인하고 그룹에 여행을 올리면 <b>링크 하나</b>로 공유할 수 있어요. 일정을 바꿔도 링크를 다시 보낼 필요가 없어요.</p>
-              <button type="button" class="btn primary" id="f-login">${ICON.users}로그인하기</button>`;
+              <button type="button" class="btn primary" id="f-login">${ICON.users}로그인하기</button>${APP_SHARE}`;
           }
         };
         drawFam();
@@ -2011,6 +2024,7 @@
           const b = ev.target.closest('button'); if (!b) return;
           if (b.dataset.perm) { b.disabled = true; try { await C().setEditor(b.dataset.perm, !!b.dataset.on); toast(b.dataset.on ? '수정 권한을 줬어요' : '보기만 하도록 바꿨어요'); } catch (err) { toast('바꾸지 못했어요. 인터넷 연결을 확인해 주세요.'); } drawFam(); return; }
           if (b.id === 'f-fam') { close(); familySheet(); return; }
+          if (b.id === 'f-app') { shareApp(); return; }
           if (b.id === 'f-copy') { copyText(famLink(t)); ready(); }
           else if (b.id === 'f-send') {
             ready();
