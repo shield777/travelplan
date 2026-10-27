@@ -129,8 +129,8 @@ body::before {
 .btn.sm { min-height: 32px; padding: 0 10px; font-size: 13px; }
 
 /* ───── 여행 목록 ───── */
-.app-share { display: flex; justify-content: center; margin: 28px 0 8px; }
-.app-share .btn { color: var(--muted); }
+.app-share { display: grid; gap: 6px; justify-items: start; padding-top: 12px; border-top: 1px solid var(--line); }
+.app-share b { font-size: 14px; }
 .year-group { display: grid; gap: 10px; margin-top: 18px; }
 .year-head {
   display: flex; align-items: baseline; gap: 10px;

@@ -436,7 +436,6 @@
             <div class="year-head">${esc(y)}<span>${byYear[y].length}개 여행</span></div>
             ${byYear[y].sort((a, b) => (a.startDate || '').localeCompare(b.startDate || '')).map(tripCard).join('')}
           </section>`).join('')}
-        <div class="app-share"><button class="btn sm" data-act="share-app">${ICON.share}이 앱을 지인에게 보내기</button></div>
       </div>`;
   }
 
@@ -1982,7 +1981,10 @@
   }
   const famLink = t => `${location.origin}${location.pathname}#t=${t.cloud ? t.cloud.fam + '.' : ''}${t.id}`;
   function shareSheet(t) {
-    openSheet('일정 공유', `<div class="fam-share" id="fam-share"></div>`,
+    openSheet('일정 공유', `<div class="fam-share" id="fam-share"></div>
+      <div class="app-share"><b>이 앱 알려 주기</b>
+        <span class="note-small">함께 가지 않는 지인에게 앱 주소와 사용법만 보내요. 이 여행은 보내지 않아요.</span>
+        <button type="button" class="btn sm" id="f-app">${ICON.share}이 앱을 지인에게 보내기</button></div>`,
       `<button type="button" class="btn" data-close="1">닫기</button>`,
       (root, close) => {
         const fs = $('#fam-share', root);
@@ -2008,6 +2010,7 @@
               <button type="button" class="btn primary" id="f-login">${ICON.users}로그인하기</button>`;
           }
         };
+        $('#f-app', root).addEventListener('click', shareApp);
         drawFam();
         if (!C()) return;
         sheetRefresh = drawFam;
@@ -2242,7 +2245,6 @@
       case 'family': familySheet(); break;
       case 'del-example': deleteTrips(x => x.example); toast('예시 여행을 지웠어요'); break;
       case 'backup': backupSheet(); break;
-      case 'share-app': shareApp(); break;
       case 'open-trip': selItem = null; ui.tripId = id; ui.view = 'trip'; ui.tab = ui.tab || 'plan'; render(); if (!jumpToToday()) window.scrollTo(0, 0); break;
       case 'home': selItem = null; ui.view = 'home'; render(); window.scrollTo(0, 0); break;
       case 'edit-trip': tripSheet(t); break;
