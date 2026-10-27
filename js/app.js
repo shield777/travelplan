@@ -1126,15 +1126,24 @@
         const pick = n => (root.querySelector(`input[name=${n}]:checked`) || {}).value || '';
         // 시간은 기본 30분 간격 목록, '1분 단위로 입력'을 누르면 원래 시간 칸 (예전에 넣은 시간이 30분 단위가 아니면 처음부터 1분 단위)
         let fullMin = ['f-time', 'f-end'].some(id => { const v = val(root, id); return v && !HALF_HOURS.includes(v); });
+        const startInp = $('#f-time', root), endInp = $('#f-end', root);
         const showMode = () => {
           root.querySelectorAll('.time-pick').forEach(tp => {
             const sel = $('.tp-sel', tp), inp = $('.tp-native', tp);
-            if (!fullMin) sel.innerHTML = halfOpts(inp.value);
+            if (!fullMin) sel.innerHTML = halfOpts(inp.value, inp === endInp ? startInp.value : '');
             sel.hidden = fullMin; inp.hidden = !fullMin;
           });
+          endInp.min = startInp.value || '';
           $('#f-tp-mode', root).checked = fullMin;
         };
-        root.querySelectorAll('.time-pick .tp-sel').forEach(sel => sel.addEventListener('change', () => { sel.nextElementSibling.value = sel.value; }));
+        // 시작 시간을 바꾸면 끝 시간은 그 다음 시각부터 고르게 해요 (이미 고른 끝 시간이 시작보다 빠르거나 같으면 비워요)
+        const syncEnd = () => {
+          const st = startInp.value;
+          if (st && endInp.value && endInp.value <= st) endInp.value = '';
+          showMode();
+        };
+        root.querySelectorAll('.time-pick .tp-sel').forEach(sel => sel.addEventListener('change', () => { sel.nextElementSibling.value = sel.value; if (sel.nextElementSibling === startInp) syncEnd(); }));
+        startInp.addEventListener('change', syncEnd);
         $('#f-tp-mode', root).addEventListener('change', e => { fullMin = e.target.checked; showMode(); });
         showMode();
         const updResv = () => { $('#f-paid-wrap', root).hidden = !pick('f-resv'); $('#f-payby-wrap', root).hidden = !pick('f-resv') || !pick('f-paid'); };
@@ -1173,7 +1182,9 @@
   // 경비
   // 일정 시간 칸: 기본은 30분 간격 목록(00:00·00:30…), '1분 단위로 입력'을 누르면 원래의 시간 입력칸
   const HALF_HOURS = Array.from({ length: 48 }, (_, k) => `${String(Math.floor(k / 2)).padStart(2, '0')}:${k % 2 ? '30' : '00'}`);
-  const halfOpts = v => ['', ...HALF_HOURS, ...(v && !HALF_HOURS.includes(v) ? [v] : [])].sort()
+  // after를 주면 그 시각 이후만 보여 줘요 (끝 시간은 시작 시간 다음부터). 지금 값은 항상 남겨요
+  const halfOpts = (v, after = '') => ['', ...HALF_HOURS, ...(v && !HALF_HOURS.includes(v) ? [v] : [])].sort()
+    .filter(x => !x || x === v || !after || x > after)
     .map(x => `<option value="${x}" ${x === (v || '') ? 'selected' : ''}>${x || '--:--'}</option>`).join('');
   function timePick(id, v) {
     return `<span class="time-pick"><select class="tp-sel" aria-label="시간">${halfOpts(v)}</select><input type="time" id="${id}" class="tp-native" value="${esc(v || '')}"></span>`;
