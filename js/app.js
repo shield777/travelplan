@@ -1967,7 +1967,7 @@
     }).join('');
     return `<div class="field" style="margin-top:4px"><span>고칠 수 있는 사람 <span class="hint">${c.isOwner ? '버튼을 누르면 바뀌어요' : '권한은 만든 사람이 바꿔요'}</span></span>
       <ul class="fam-list">${rows}</ul>
-      <button type="button" class="btn sm ghost" id="f-fam" style="justify-self:start">${ICON.users}가족 추가·관리</button></div>`;
+      <button type="button" class="btn sm ghost" id="f-fam" style="justify-self:start">${ICON.users}추가·관리</button></div>`;
   }
   const famLink = t => `${location.origin}${location.pathname}#t=${t.cloud ? t.cloud.fam + '.' : ''}${t.id}`;
   function shareSheet(t) {
