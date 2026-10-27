@@ -1126,7 +1126,7 @@
           save(); close(); render(); toast(n ? '일정과 연결된 비용을 삭제했어요' : '일정을 삭제했어요');
         });
         const pick = n => (root.querySelector(`input[name=${n}]:checked`) || {}).value || '';
-        // 시간: 오전/오후 · 시 · 분을 따로 골라요. 분은 기본 00·30, '분단위 입력'을 체크하면 00~59
+        // 시간: 오전/오후와 시:분을 골라요. 분은 기본 00·30, '분단위 입력'을 체크하면 00~59
         // (예전에 넣은 시간이 30분 단위가 아니면 처음부터 체크). 끝 시간은 시작 시간 다음 시각부터 고를 수 있어요
         let fullMin = ['f-time', 'f-end'].some(id => { const v = val(root, id); return v && !/:(00|30)$/.test(v); });
         const tpStart = $('.tp3[data-for=f-time]', root), tpEnd = $('.tp3[data-for=f-end]', root);
@@ -1139,27 +1139,38 @@
           let ap = v ? apOf(v) : (tp.dataset.ap || (tp === tpEnd && after ? apOf(after) : 'am'));
           if (!aps.includes(ap)) ap = aps[0] || 'am';
           tp.dataset.ap = ap;
-          const hours = [...new Set(c.filter(x => apOf(x) === ap).map(x => x.slice(0, 2)))];
-          const h = v ? v.slice(0, 2) : '';
-          const mins = h ? c.filter(x => x.slice(0, 2) === h).map(x => x.slice(3)) : (fullMin ? Array.from({ length: 60 }, (_, k) => pad2(k)) : ['00', '30']);
           $('.tp-ap', tp).innerHTML = aps.map(a => `<option value="${a}" ${a === ap ? 'selected' : ''}>${a === 'am' ? '오전' : '오후'}</option>`).join('');
-          $('.tp-hr', tp).innerHTML = `<option value="">--</option>` + hours.map(x => `<option value="${x}" ${x === h ? 'selected' : ''}>${(+x % 12) || 12}시</option>`).join('');
-          $('.tp-mi', tp).innerHTML = mins.map(x => `<option value="${x}" ${v && x === v.slice(3) ? 'selected' : ''}>${x}분</option>`).join('');
-          $('.tp-mi', tp).disabled = !h;
+          const hm12 = x => `${(+x.slice(0, 2) % 12) || 12}:${x.slice(3)}`;
+          // 분단위 입력이면 목록 대신 글자로 (예: 315 → 3:15)
+          $('.tp-hm', tp).hidden = fullMin; $('.tp-txt', tp).hidden = !fullMin;
+          if (fullMin) { if (document.activeElement !== $('.tp-txt', tp)) $('.tp-txt', tp).value = v ? hm12(v) : ''; return; }
+          $('.tp-hm', tp).innerHTML = `<option value="">--:--</option>` + c.filter(x => apOf(x) === ap)
+            .map(x => `<option value="${x}" ${x === v ? 'selected' : ''}>${hm12(x)}</option>`).join('');
+        };
+        // 글자로 넣은 시간 읽기: 315 · 3:15 · 3.15 → 오전/오후 칸 기준, 13 이상이면 24시간제로 봐요. 못 읽으면 null
+        const parseTyped = (text, ap) => {
+          const t = String(text).trim(); if (!t) return '';
+          let h, m;
+          const sep = t.match(/^(\d{1,2})\s*[:.\s]\s*(\d{1,2})$/);
+          if (sep) { h = +sep[1]; m = +sep[2]; }
+          else if (/^\d{1,4}$/.test(t)) { if (t.length <= 2) { h = +t; m = 0; } else { h = +t.slice(0, -2); m = +t.slice(-2); } }
+          else return null;
+          if (m > 59 || h > 23) return null;
+          if (h <= 12) h = h % 12 + (ap === 'pm' ? 12 : 0);
+          return `${pad2(h)}:${pad2(m)}`;
         };
         const onPick = (tp, target) => {
-          const ap = $('.tp-ap', tp).value, hr = $('.tp-hr', tp).value, mi = $('.tp-mi', tp).value;
-          const inp = hid(tp), after = tp === tpEnd ? hid(tpStart).value : '';
+          const ap = $('.tp-ap', tp).value, inp = hid(tp), after = tp === tpEnd ? hid(tpStart).value : '';
           tp.dataset.ap = ap;
           if (target.classList.contains('tp-ap')) {
             // 오전/오후만 바꾸면 같은 시각의 반대편으로 (예: 오전 3:00 → 오후 3:00)
             if (inp.value) { const hh = +inp.value.slice(0, 2) % 12 + (ap === 'pm' ? 12 : 0); inp.value = `${pad2(hh)}:${inp.value.slice(3)}`; }
-          } else if (!hr) inp.value = '';
-          else {
-            const c = timeCands(fullMin ? 1 : 30, '', after).filter(x => x.slice(0, 2) === hr);
-            inp.value = c.includes(`${hr}:${mi}`) ? `${hr}:${mi}` : (c[0] || `${hr}:00`);
-          }
-          if (after && inp.value && inp.value <= after) inp.value = '';
+          } else if (target.classList.contains('tp-txt')) {
+            const got = parseTyped(target.value, ap);
+            if (got === null) { $('#f-err', root).textContent = '시간은 315 또는 3:15처럼 넣어 주세요.'; inp.value = ''; }
+            else { $('#f-err', root).textContent = ''; inp.value = got; if (got) tp.dataset.ap = apOf(got); }
+          } else inp.value = $('.tp-hm', tp).value;
+          if (after && inp.value && inp.value <= after) { inp.value = ''; if (target.classList.contains('tp-txt')) $('#f-err', root).textContent = '끝 시간은 시작 시간보다 늦게 넣어 주세요.'; }
           if (tp === tpStart) { const e = hid(tpEnd); if (inp.value && e.value && e.value <= inp.value) e.value = ''; if (!e.value) delete tpEnd.dataset.ap; fill(tpEnd); }
           fill(tp);
         };
@@ -1201,10 +1212,10 @@
   }
 
   // 경비
-  // 일정 시간 칸: [오전/오후] [시] [분] (목록은 itemSheet에서 채워요). 값은 숨은 칸에 HH:MM
+  // 일정 시간 칸: [오전/오후] [시:분] (목록은 itemSheet에서 채워요). 값은 숨은 칸에 HH:MM
   const pad2 = n => String(n).padStart(2, '0');
   function timePick(id, v) {
-    return `<div class="tp3" data-for="${id}"><select class="tp-ap" aria-label="오전/오후"></select><select class="tp-hr" aria-label="시"></select><select class="tp-mi" aria-label="분"></select><input type="hidden" id="${id}" value="${esc(v || '')}"></div>`;
+    return `<div class="tp3" data-for="${id}"><select class="tp-ap" aria-label="오전/오후"></select><select class="tp-hm" aria-label="시간"></select><input type="text" class="tp-txt" inputmode="numeric" placeholder="예: 315" aria-label="시간 직접 입력" autocomplete="off" hidden><input type="hidden" id="${id}" value="${esc(v || '')}"></div>`;
   }
   // 고를 수 있는 시각들: step분 간격 + 지금 값, after를 주면 그 이후만
   function timeCands(step, v, after) {
