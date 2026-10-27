@@ -441,6 +441,8 @@ body.has-move-bar #toast { bottom: calc(90px + env(safe-area-inset-bottom, 0px))
 .resv.unpaid { background: var(--warn-soft); color: var(--warn); }
 .time-pick { display: block; min-width: 0; }
 .time-pick select, .time-pick input { width: 100%; min-width: 0; }
+.time-row select { padding-left: 6px; padding-right: 2px; } /* "오후 12:30"이 잘리지 않게 */
+.grid3.time-row { grid-template-columns: minmax(0, .9fr) minmax(0, 1.05fr) minmax(0, 1.05fr); }
 .tp-mode { justify-self: end; margin-top: -6px; font-size: 12px; color: var(--muted); }
 .tp-mode { gap: 5px; }
 .check-inline.tp-mode input { width: 15px; height: 15px; }
