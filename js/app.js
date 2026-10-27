@@ -1105,7 +1105,7 @@
         <label class="field"><span>시작</span>${timePick('f-time', item.time)}</label>
         <label class="field"><span>끝 <span class="hint">(선택)</span></span>${timePick('f-end', item.endTime)}</label>
       </div>
-      <button type="button" class="btn sm ghost tp-mode" id="f-tp-mode"></button>
+      <label class="check-inline tp-mode"><input type="checkbox" id="f-tp-mode"> 분단위 입력</label>
       <div class="field"><span>예약 <span class="hint">(선택) 투어·식당처럼 예약이 필요한 일정</span></span><div class="type-pick resv-pick">
         ${[['', '선택 안 함'], ['done', '예약완료'], ['todo', '예약필요']].map(([v, l]) => `<label><input type="radio" name="f-resv" value="${v}" ${(item.resv || '') === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
         <div class="sub-pick" id="f-paid-wrap" ${item.resv ? '' : 'hidden'}><span class="sub-l">결제</span><div class="type-pick resv-pick">
@@ -1132,10 +1132,10 @@
             if (!fullMin) sel.innerHTML = halfOpts(inp.value);
             sel.hidden = fullMin; inp.hidden = !fullMin;
           });
-          $('#f-tp-mode', root).textContent = fullMin ? '30분 단위로 고르기' : '1분 단위로 입력';
+          $('#f-tp-mode', root).checked = fullMin;
         };
         root.querySelectorAll('.time-pick .tp-sel').forEach(sel => sel.addEventListener('change', () => { sel.nextElementSibling.value = sel.value; }));
-        $('#f-tp-mode', root).addEventListener('click', () => { fullMin = !fullMin; showMode(); });
+        $('#f-tp-mode', root).addEventListener('change', e => { fullMin = e.target.checked; showMode(); });
         showMode();
         const updResv = () => { $('#f-paid-wrap', root).hidden = !pick('f-resv'); $('#f-payby-wrap', root).hidden = !pick('f-resv') || !pick('f-paid'); };
         root.querySelectorAll('input[name=f-resv], input[name=f-paid]').forEach(r => r.addEventListener('change', updResv));
