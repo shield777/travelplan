@@ -3,176 +3,182 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<!--APP-HEAD-->
 <title>대화 통역기</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="한국어로 말하면 쉬운 영어로, 상대의 영어는 한국어로. 대화 흐름에 맞춰 번역하는 여행용 통역 앱">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="통역기">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#17202A" media="(prefers-color-scheme: dark)">
-<link rel="apple-touch-icon" href="icon-180.png">
-<link rel="icon" type="image/png" href="icon-192.png">
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
 <style>
-/* Layout: one-screen chat — header, scrolling transcript, composer pinned to the bottom.
-   My lines sit right in cobalt, the other person's sit left with a teal label. */
+/* Layout: messenger-style chat — the other person on the left under a round avatar, me on the right in yellow.
+   Every bubble holds the English line on top and its Korean meaning under a hairline. */
 :root{
-  --bg:#EDF0F3; --surface:#FFFFFF; --ink:#14202B; --muted:#5A6672; --line:#D5DBE1;
-  --me:#1F4FC4; --me-ink:#FFFFFF;
-  --them:#0B7062; --them-soft:#DCEFEB;
-  --warn:#A3441A; --warn-soft:#F8E6DC;
-  --live:#C62F2F;
-  --scrim:rgb(10 18 28 / .45);
-  --f-en:"Atkinson Hyperlegible","Helvetica Neue",Arial,sans-serif;
-  --f-ko:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --wall:#BCCDDD; --bar:#FFFFFF; --ink:#191919; --muted:#55626F; --line:#D9DEE3; --field:#F2F4F6;
+  --mine:#FEE24C; --mine-ink:#191919;
+  --theirs:#FFFFFF; --theirs-ink:#191919;
+  --avatar:#7C93AB; --avatar-ink:#FFFFFF;
+  --pill:rgb(0 0 0 / .14); --pill-ink:#FFFFFF;
+  --warn:#A3441A; --warn-soft:#F8E6DC; --ok:#0B7062;
+  --live:#D93636; --scrim:rgb(10 18 28 / .45); --focus:#1F4FC4;
+  --sat:env(safe-area-inset-top,0px); --sab:env(safe-area-inset-bottom,0px);
+  /* system faces, so the chat reads like the phone's own messenger */
+  --f-en:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --f-ko:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;
   color-scheme:light;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#0E141A; --surface:#17202A; --ink:#E6EBF0; --muted:#94A1AE; --line:#29343F;
-  --me:#6B93F2; --me-ink:#0A1226;
-  --them:#45BBA8; --them-soft:#14302C;
-  --warn:#EE9466; --warn-soft:#3A2218;
-  --live:#F06B6B;
-  --scrim:rgb(0 0 0 / .6); color-scheme:dark;
+  --wall:#0D0D0F; --bar:#1A1A1D; --ink:#ECECEE; --muted:#9A9AA2; --line:#2C2C31; --field:#26262B;
+  --mine:#F5D83D; --mine-ink:#141414;
+  --theirs:#2A2A2F; --theirs-ink:#ECECEE;
+  --avatar:#3E4A57; --avatar-ink:#E6EBF0;
+  --pill:rgb(255 255 255 / .1); --pill-ink:#C9C9CF;
+  --warn:#EE9466; --warn-soft:#3A2218; --ok:#45BBA8;
+  --live:#F06B6B; --scrim:rgb(0 0 0 / .6); --focus:#8FB0FF; color-scheme:dark;
 }}
 :root[data-theme="dark"]{
-  --bg:#0E141A; --surface:#17202A; --ink:#E6EBF0; --muted:#94A1AE; --line:#29343F;
-  --me:#6B93F2; --me-ink:#0A1226;
-  --them:#45BBA8; --them-soft:#14302C;
-  --warn:#EE9466; --warn-soft:#3A2218;
-  --live:#F06B6B;
-  --scrim:rgb(0 0 0 / .6); color-scheme:dark;
+  --wall:#0D0D0F; --bar:#1A1A1D; --ink:#ECECEE; --muted:#9A9AA2; --line:#2C2C31; --field:#26262B;
+  --mine:#F5D83D; --mine-ink:#141414;
+  --theirs:#2A2A2F; --theirs-ink:#ECECEE;
+  --avatar:#3E4A57; --avatar-ink:#E6EBF0;
+  --pill:rgb(255 255 255 / .1); --pill-ink:#C9C9CF;
+  --warn:#EE9466; --warn-soft:#3A2218; --ok:#45BBA8;
+  --live:#F06B6B; --scrim:rgb(0 0 0 / .6); --focus:#8FB0FF; color-scheme:dark;
 }
 *,*::before,*::after{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{height:100%;margin:0}
-body{background:var(--bg);color:var(--ink);font-family:var(--f-ko);font-size:15px;line-height:1.5;display:flex;flex-direction:column;overflow:hidden;-webkit-text-size-adjust:100%}
-.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+body{background:var(--wall);color:var(--ink);font-family:var(--f-ko);font-size:15px;line-height:1.45;display:flex;flex-direction:column;overflow:hidden;-webkit-text-size-adjust:100%}
+.wrap{padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
 .inner{max-width:720px;margin:0 auto;width:100%}
 button,select,textarea,input{font:inherit;color:inherit}
 button{cursor:pointer;-webkit-tap-highlight-color:transparent}
-:focus-visible{outline:2px solid var(--me);outline-offset:2px}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 
 /* header */
-header{background:var(--surface);border-bottom:1px solid var(--line);padding-block:calc(10px + env(safe-area-inset-top,0px)) 10px}
-header .inner{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-h1{font-size:17px;font-weight:600;margin:0;margin-right:auto;letter-spacing:-.01em}
-h1 small{font-family:var(--f-en);font-weight:400;color:var(--muted);font-size:13px;margin-left:6px}
-@media (max-width:440px){h1 small{display:none}header select{max-width:118px}}
-select{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:14px;color:var(--ink)}
-.ghost{background:none;border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13px}
+header{background:var(--bar);border-bottom:1px solid var(--line);padding-block:calc(8px + var(--sat)) 8px}
+header .inner{display:flex;align-items:center;gap:8px}
+.title{margin-right:auto;min-width:0;display:flex;flex-direction:column;line-height:1.25}
+.title b{font-size:16px;font-weight:600}
+.title select{border:0;background:none;padding:0;font-size:12.5px;color:var(--muted);max-width:150px}
+.ghost{background:none;border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13px;white-space:nowrap}
 .ghost.arm{border-color:var(--warn);color:var(--warn);background:var(--warn-soft)}
 
-/* transcript */
+/* chat wall */
 main{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
-main .inner{display:flex;flex-direction:column;gap:14px;padding-block:16px 20px}
-.note{font-size:13px;color:var(--muted);background:var(--surface);border:1px dashed var(--line);border-radius:10px;padding:10px 12px}
-.note b{color:var(--ink);font-weight:600}
-.note.key{border-style:solid;border-color:var(--me);color:var(--ink);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
-.empty{text-align:center;color:var(--muted);padding:40px 8px;font-size:14px;line-height:1.7}
-.empty strong{display:block;color:var(--ink);font-size:16px;margin-bottom:6px}
+main .inner{display:flex;flex-direction:column;padding-block:12px 16px}
+.day{align-self:center;background:var(--pill);color:var(--pill-ink);font-size:12px;border-radius:999px;padding:3px 12px;margin-block:8px 10px}
+.note{align-self:center;max-width:92%;text-align:center;background:var(--pill);color:var(--pill-ink);font-size:12.5px;border-radius:12px;padding:6px 12px;margin-block:4px 10px}
+.note.key{background:var(--bar);color:var(--ink);display:flex;flex-direction:column;gap:8px;align-items:center;padding:12px 14px}
+.empty{align-self:center;text-align:center;color:var(--pill-ink);background:var(--pill);border-radius:14px;padding:14px 16px;font-size:13.5px;line-height:1.7;margin-top:24px}
+.empty strong{display:block;font-size:15px;margin-bottom:4px}
 
-.row{display:flex;flex-direction:column;gap:6px;max-width:88%}
-.row.me{align-self:flex-end;align-items:flex-end}
-.row.them{align-self:flex-start;align-items:flex-start}
-.who{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center}
-.who .tag{font-weight:600}
-.row.me .who .tag{color:var(--me)}
-.row.them .who .tag{color:var(--them)}
-.ex{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:0 6px}
-
-.bub{border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:0;max-width:100%}
-.row.me .bub{background:var(--me);color:var(--me-ink);border-bottom-right-radius:4px}
-.row.them .bub{background:var(--surface);border:1px solid var(--line);border-bottom-left-radius:4px}
-.en{font-family:var(--f-en);font-size:20px;line-height:1.35;font-weight:700;overflow-wrap:anywhere}
-.ko{font-size:14px;overflow-wrap:anywhere}
-.row.me .ko{opacity:.88}
-.pron{font-size:12.5px;opacity:.75;overflow-wrap:anywhere}
-.tip{font-size:12.5px;border-radius:8px;padding:6px 8px;background:color-mix(in srgb,currentColor 12%,transparent)}
-.src{font-size:12px;color:var(--muted);overflow-wrap:anywhere;text-align:right}
-.acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
-.act{border:0;border-radius:999px;padding:5px 11px;font-size:12.5px;background:color-mix(in srgb,currentColor 13%,transparent)}
-.pending .en{opacity:.6;font-weight:400;font-size:15px;font-family:var(--f-ko)}
+.msg{display:flex;gap:8px;margin-top:3px}
+.msg.first{margin-top:12px}
+.msg.them{justify-content:flex-start}
+.msg.me{justify-content:flex-end}
+.avatar{flex:none;width:40px;height:40px;border-radius:15px;background:var(--avatar);color:var(--avatar-ink);display:grid;place-items:center;font-family:var(--f-en);font-weight:700;font-size:17px}
+.avatar.blank{visibility:hidden;height:0}
+.col{display:flex;flex-direction:column;gap:4px;min-width:0;max-width:calc(100% - 48px)}
+.msg.me .col{max-width:84%;align-items:flex-end}
+.name{font-size:12.5px;color:var(--ink);opacity:.85}
+.line{display:flex;align-items:flex-end;gap:5px;min-width:0}
+.msg.me .line{flex-direction:row-reverse}
+.time{flex:none;font-size:11px;color:var(--muted);white-space:nowrap;padding-bottom:1px}
+.bub{display:flex;flex-direction:column;gap:6px;text-align:left;border:0;border-radius:16px;padding:9px 12px;min-width:0;max-width:100%}
+.msg.them .bub{background:var(--theirs);color:var(--theirs-ink)}
+.msg.me .bub{background:var(--mine);color:var(--mine-ink)}
+.msg.them.first .bub{border-top-left-radius:4px}
+.msg.me.first .bub{border-top-right-radius:4px}
+.en{font-family:var(--f-en);font-size:17px;line-height:1.35;overflow-wrap:anywhere;white-space:pre-wrap}
+.ko{font-size:13.5px;opacity:.72;border-top:1px solid color-mix(in srgb,currentColor 16%,transparent);padding-top:6px;overflow-wrap:anywhere;white-space:pre-wrap}
+.tip{font-size:12.5px;border-radius:8px;padding:5px 8px;background:color-mix(in srgb,currentColor 10%,transparent)}
+.pending .ko{border-top-style:dashed}
 .dots::after{content:"";display:inline-block;width:1.2em;text-align:left;animation:dots 1.2s steps(4) infinite}
 @keyframes dots{0%{content:""}25%{content:"."}50%{content:".."}75%{content:"..."}}
 
-.replies{display:flex;flex-direction:column;gap:6px;width:100%}
-.replies .lbl{font-size:12px;color:var(--muted)}
-.reply{display:flex;flex-direction:column;align-items:flex-start;gap:1px;text-align:left;background:var(--them-soft);border:1px solid transparent;border-radius:12px;padding:8px 12px;max-width:100%}
-.reply .rk{font-size:14px;font-weight:500}
-.reply .re{font-family:var(--f-en);font-size:13.5px;color:var(--muted);overflow-wrap:anywhere}
-
 /* composer */
-footer{background:var(--surface);border-top:1px solid var(--line);padding-block:10px calc(10px + env(safe-area-inset-bottom,0px))}
+footer{background:var(--bar);border-top:1px solid var(--line);padding-block:8px calc(8px + var(--sab))}
 footer .inner{display:flex;flex-direction:column;gap:8px}
-.modes{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--bg);border-radius:10px;padding:3px}
-.mode{border:0;background:none;border-radius:8px;padding:7px 6px;font-size:14px;color:var(--muted);display:flex;flex-direction:column;align-items:center;line-height:1.25}
-.mode small{font-family:var(--f-en);font-size:11px}
-.mode[aria-pressed="true"]{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgb(0 0 0 / .12)}
-.mode[data-mode="me"][aria-pressed="true"]{color:var(--me)}
-.mode[data-mode="them"][aria-pressed="true"]{color:var(--them)}
+.quick{display:flex;flex-direction:column;gap:6px}
+.quick .lbl{font-size:12px;color:var(--muted)}
+.chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;max-width:78%;display:flex;flex-direction:column;align-items:flex-start;gap:1px;text-align:left;border:1px solid var(--line);background:var(--field);border-radius:14px;padding:7px 12px}
+.chip .ck{font-size:14px;font-weight:500}
+.chip .ce{font-family:var(--f-en);font-size:12.5px;color:var(--muted);overflow-wrap:anywhere}
 .status{font-size:13px;color:var(--warn);background:var(--warn-soft);border-radius:8px;padding:6px 10px}
-.compose{display:flex;gap:8px;align-items:flex-end}
-textarea{flex:1;min-width:0;resize:none;border:1px solid var(--line);border-radius:12px;background:var(--bg);padding:10px 12px;font-size:16px;line-height:1.4;max-height:30vh}
-.mic{flex:none;width:46px;height:46px;border-radius:12px;border:1px solid var(--line);background:var(--bg);display:grid;place-items:center;color:var(--ink)}
-.mic svg{width:22px;height:22px}
-.mic.on{background:var(--live);border-color:var(--live);color:#fff;animation:pulse 1.2s ease-in-out infinite}
+.compose{display:flex;gap:6px;align-items:flex-end}
+.who{flex:none;height:42px;min-width:48px;border-radius:21px;border:1px solid var(--line);background:var(--field);font-size:13px;font-weight:600;padding:0 10px;display:flex;align-items:center;gap:4px}
+.who[data-who="me"]{background:var(--mine);color:var(--mine-ink);border-color:transparent}
+.who small{font-weight:400;font-size:10.5px;opacity:.7}
+textarea{flex:1;min-width:0;resize:none;border:0;border-radius:21px;background:var(--field);padding:10px 14px;font-size:16px;line-height:1.4;max-height:30vh;min-height:42px}
+.mic{flex:none;width:42px;height:42px;border-radius:21px;border:0;background:var(--field);display:grid;place-items:center;color:var(--ink)}
+.mic svg{width:21px;height:21px}
+.mic.on{background:var(--live);color:#fff;animation:pulse 1.2s ease-in-out infinite}
 @keyframes pulse{50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--live) 25%,transparent)}}
-.send{border:0;border-radius:12px;padding:0 16px;height:46px;font-weight:600;background:var(--me);color:var(--me-ink);flex:none}
-.send.them{background:var(--them);color:var(--surface)}
-.send:disabled{opacity:.5;cursor:default}
-.hint{font-size:12px;color:var(--muted)}
+.send{flex:none;height:42px;border:0;border-radius:21px;padding:0 15px;font-weight:600;background:var(--mine);color:var(--mine-ink)}
+.send:disabled{opacity:.45;cursor:default}
 @media (prefers-reduced-motion:reduce){.dots::after{animation:none;content:"..."}.mic.on{animation:none}}
 
-/* show-to-partner view */
-.big{position:fixed;inset:0;z-index:20;background:var(--surface);display:flex;flex-direction:column;justify-content:center;gap:18px;
-  padding:calc(24px + env(safe-area-inset-top,0px)) max(24px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(24px,env(safe-area-inset-left,0px))}
-.big .en{font-size:clamp(30px,8.5vw,64px);line-height:1.2;text-wrap:balance}
-.big .ko{font-size:16px;color:var(--muted)}
-.big .acts{gap:10px}
-.big .act{font-size:15px;padding:10px 18px}
-
-/* settings sheet */
+/* sheets */
 .sheet{position:fixed;inset:0;z-index:30;background:var(--scrim);display:flex;align-items:flex-end;justify-content:center}
-.panel{background:var(--surface);width:100%;max-width:560px;max-height:92%;overflow-y:auto;border-radius:18px 18px 0 0;
-  padding:18px max(18px,env(safe-area-inset-right,0px)) calc(22px + env(safe-area-inset-bottom,0px)) max(18px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:20px}
-.panel-head{display:flex;align-items:center;justify-content:space-between}
+.panel{background:var(--bar);width:100%;max-width:560px;max-height:92%;overflow-y:auto;border-radius:18px 18px 0 0;
+  padding:18px max(18px,env(safe-area-inset-right,0px)) calc(20px + var(--sab)) max(18px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:18px}
+.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .panel h2{margin:0;font-size:18px}
 .panel h3{margin:0 0 6px;font-size:15px}
 .panel section{display:flex;flex-direction:column;gap:8px}
 .small{font-size:13px;color:var(--muted);margin:0}
+.menu .quote{font-family:var(--f-en);font-size:18px;line-height:1.35;overflow-wrap:anywhere}
+.menu .meta{font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:2px}
+.menu-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mbtn{border:1px solid var(--line);background:var(--field);border-radius:12px;padding:12px;font-size:14px;font-weight:500}
+.mbtn.danger{color:var(--warn)}
 .keyrow{display:flex;gap:8px;flex-wrap:wrap}
-.keyrow input{flex:1 1 200px;min-width:0;border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:10px 12px;font-size:16px;font-family:var(--f-en)}
-.primary{border:0;border-radius:10px;padding:10px 14px;background:var(--me);color:var(--me-ink);font-weight:600}
+.keyrow input{flex:1 1 200px;min-width:0;border:1px solid var(--line);border-radius:10px;background:var(--field);padding:10px 12px;font-size:16px;font-family:var(--f-en)}
+.primary{border:0;border-radius:10px;padding:10px 14px;background:var(--mine);color:var(--mine-ink);font-weight:600}
 .primary:disabled{opacity:.5}
-.link{background:none;border:0;padding:0;color:var(--me);font-size:13px;text-decoration:underline;align-self:flex-start}
-.ok{color:var(--them)}
-.bad{color:var(--warn)}
+.link{background:none;border:0;padding:0;color:var(--focus);font-size:13px;text-decoration:underline;align-self:flex-start}
+.ok{color:var(--ok)} .bad{color:var(--warn)}
 .models{display:flex;flex-direction:column;gap:6px}
 .model{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:12px;padding:10px 12px;cursor:pointer}
-.model:has(input:checked){border-color:var(--me);background:color-mix(in srgb,var(--me) 8%,transparent)}
-.model input{margin-top:4px;accent-color:var(--me)}
+.model:has(input:checked){border-color:var(--ink)}
+.model input{margin-top:4px}
 .model b{display:block;font-size:14px}
 .model span{font-size:12.5px;color:var(--muted)}
 details{font-size:13px;color:var(--muted)}
 details summary{cursor:pointer;color:var(--ink)}
 details ol{margin:8px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
 .usage{font-size:14px;font-variant-numeric:tabular-nums}
+
+/* show-to-partner view */
+.big{position:fixed;inset:0;z-index:40;background:var(--bar);display:flex;flex-direction:column;justify-content:center;gap:18px;
+  padding:calc(24px + var(--sat)) max(24px,env(safe-area-inset-right,0px)) calc(24px + var(--sab)) max(24px,env(safe-area-inset-left,0px))}
+.big .en{font-size:clamp(30px,8.5vw,64px);line-height:1.2;font-weight:700;text-wrap:balance;white-space:normal}
+.big .ko{font-size:16px;border:0;padding:0}
+.big .menu-btns{max-width:420px}
 </style>
+<!--/APP-HEAD-->
+<!--REPO-ONLY-->
+<meta name="description" content="한국어는 영어로, 영어는 한국어로. 대화 흐름에 맞춰 번역하는 여행용 통역 앱">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="통역기">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1A1A1D" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<!--/REPO-ONLY-->
 </head>
 <body>
 
 <header class="wrap">
   <div class="inner">
-    <h1>대화 통역기<small>KO ⇄ EN</small></h1>
-    <select id="sit" aria-label="상황"></select>
+    <div class="title">
+      <b>대화 통역기</b>
+      <select id="sit" aria-label="상황"></select>
+    </div>
     <button class="ghost" id="reset" type="button">새 대화</button>
-    <button class="ghost" id="openSettings" type="button">설정</button>
+    <button class="ghost" id="openSettings" type="button" hidden>설정</button>
   </div>
 </header>
 
@@ -182,28 +188,42 @@ details ol{margin:8px 0 0;padding-left:20px;display:flex;flex-direction:column;g
 
 <footer class="wrap">
   <div class="inner">
-    <div class="modes" role="group" aria-label="누구의 말인가요">
-      <button class="mode" type="button" data-mode="me" aria-pressed="true">내가 말하기<small>한국어 → English</small></button>
-      <button class="mode" type="button" data-mode="them" aria-pressed="false">상대방이 한 말<small>English → 한국어</small></button>
+    <div class="quick" id="quick" hidden>
+      <div class="lbl">이렇게 답할 수 있어요 · 누르면 바로 보내져요</div>
+      <div class="chips" id="chips"></div>
     </div>
     <div class="status" id="status" hidden></div>
     <form class="compose" id="form">
-      <textarea id="box" rows="1" enterkeyhint="send" autocomplete="off"></textarea>
+      <button class="who" id="who" type="button" data-who="me" aria-label="누구의 말인지 바꾸기"></button>
+      <textarea id="box" rows="1" enterkeyhint="send" autocomplete="off" placeholder="메시지 입력 (한↔영 자동)" aria-label="메시지 입력"></textarea>
       <button class="mic" id="mic" type="button" aria-label="말해서 입력" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
       </button>
-      <button class="send" id="send" type="submit">번역</button>
+      <button class="send" id="send" type="submit">전송</button>
     </form>
-    <div class="hint" id="hint"></div>
   </div>
 </footer>
+
+<div class="sheet" id="menu" hidden role="dialog" aria-modal="true" aria-label="메시지 메뉴">
+  <div class="panel menu">
+    <div class="quote" id="menuEn"></div>
+    <div class="meta" id="menuMeta"></div>
+    <div class="menu-btns">
+      <button class="mbtn" type="button" data-m="big">크게 보여주기</button>
+      <button class="mbtn" type="button" data-m="speak">소리로 듣기</button>
+      <button class="mbtn" type="button" data-m="copy">영어 복사</button>
+      <button class="mbtn danger" type="button" data-m="delete">이 메시지 지우기</button>
+    </div>
+    <button class="ghost" type="button" data-m="close">닫기</button>
+  </div>
+</div>
 
 <div class="big" id="big" hidden role="dialog" aria-modal="true" aria-label="상대에게 보여주기">
   <div class="en" id="bigEn"></div>
   <div class="ko" id="bigKo"></div>
-  <div class="acts">
-    <button class="act" type="button" id="bigSpeak">소리로 듣기</button>
-    <button class="act" type="button" id="bigClose">닫기</button>
+  <div class="menu-btns">
+    <button class="mbtn" type="button" id="bigSpeak">소리로 듣기</button>
+    <button class="mbtn" type="button" id="bigClose">닫기</button>
   </div>
 </div>
 
@@ -213,7 +233,6 @@ details ol{margin:8px 0 0;padding-left:20px;display:flex;flex-direction:column;g
       <h2 id="sheetTitle">설정</h2>
       <button class="ghost" id="sheetClose" type="button">닫기</button>
     </div>
-
     <section>
       <h3>Claude API 키</h3>
       <p class="small">번역은 Anthropic의 Claude가 해요. 키는 이 기기에만 저장되고, 번역할 때 Anthropic 서버로만 보내져요.</p>
@@ -226,7 +245,7 @@ details ol{margin:8px 0 0;padding-left:20px;display:flex;flex-direction:column;g
       <details>
         <summary>키 받는 방법</summary>
         <ol>
-          <li>console.anthropic.com 에 가입해요. 이 주소는 Claude 채팅 구독과 따로 운영되는 개발자용 사이트예요.</li>
+          <li>console.anthropic.com 에 가입해요. Claude 채팅 구독과 따로 운영되는 개발자용 사이트예요.</li>
           <li>Billing(결제) 메뉴에서 카드를 등록하고 크레딧을 충전해요. 최소 5달러예요.</li>
           <li>Limits(한도) 메뉴에서 월 사용 한도를 5달러 정도로 정해 두면 키가 새도 큰 돈이 나가지 않아요.</li>
           <li>API Keys 메뉴에서 Create Key를 누르고, 나온 키를 복사해 위 칸에 붙여 넣어요.</li>
@@ -234,13 +253,11 @@ details ol{margin:8px 0 0;padding-left:20px;display:flex;flex-direction:column;g
         </ol>
       </details>
     </section>
-
     <section>
       <h3>번역 모델</h3>
       <div class="models" id="models"></div>
       <p class="small">금액은 번역 1번당 대략적인 값이에요. 대화가 길어지면 조금 늘어나요.</p>
     </section>
-
     <section>
       <h3>이 기기 사용량</h3>
       <div class="usage" id="usage"></div>
@@ -250,7 +267,9 @@ details ol{margin:8px 0 0;padding-left:20px;display:flex;flex-direction:column;g
 </div>
 
 <script>
-const KEY = 'talk-interpreter-v1';
+/* claude.ai 안에서 열면 Claude 계정으로, 홈 화면 앱으로 열면 API 키로 번역해요 */
+const IN_CLAUDE = !!(window.claude && typeof window.claude.use === 'function');
+const KEY = 'talk-interpreter-v2';
 const SETTINGS_KEY = 'talk-interpreter-settings-v1';
 const USAGE_KEY = 'talk-interpreter-usage-v1';
 const API_URL = 'https://api.anthropic.com/v1/messages';
@@ -261,143 +280,158 @@ const MODELS = [
   {id:'claude-opus-5-5',   name:'최고 품질 (Opus 5.5)',    note:'가장 느려요. 번역 1번에 약 20원',              rate:[4, 20]},
 ];
 const SITUATIONS = ['일반 대화','공항·입국심사','호텔','식당·카페','쇼핑','길 묻기','교통·택시','병원·약국','업무·미팅'];
-const EXAMPLE = [
-  {who:'them', example:true, en:'Hi, welcome! Do you have a reservation?', ko:'안녕하세요, 어서 오세요! 예약하셨나요?',
-   replies:[
-     {ko:'네, 예약했어요.', en:'Yes, I have a reservation.', pron:'예스, 아이 해브 어 레저베이션.'},
-     {ko:'아니요, 오늘 빈 방 있어요?', en:'No. Do you have a room for tonight?', pron:'노. 두 유 해브 어 룸 포 투나잇?'}
-   ]},
-  {who:'me', example:true, src:'네 김 이름으로 3박 예약했어요', en:'Yes, I booked three nights under the name Kim.', ko:'네, 김이라는 이름으로 3박 예약했어요.', pron:'예스, 아이 북트 쓰리 나이츠 언더 더 네임 킴.', tip:''},
-  {who:'them', example:true, en:'Perfect. Can I see your passport, please?', ko:'좋습니다. 여권 좀 보여 주시겠어요?',
-   replies:[
-     {ko:'여기 있어요.', en:'Here you go.', pron:'히어 유 고.'},
-     {ko:'아이 것도 필요해요?', en:'Do you need my son\'s passport too?', pron:'두 유 니드 마이 썬즈 패스포트 투?'}
-   ]}
-];
+
+function exampleItems(){
+  const t = new Date(); t.setSeconds(0, 0);
+  const at = m => { const d = new Date(t); d.setMinutes(d.getMinutes() - m); return d.getTime(); };
+  return [
+    {who:'me', example:true, ts:at(6), src:'현금이 좀 부족해요. 식당이랑 차 모두 QR로 결제돼요?',
+     en:'We are a little short on cash. Can we pay by QR code at the restaurant and for the car?',
+     ko:'현금이 좀 부족해요. 식당이랑 차량 모두 QR 코드로 결제할 수 있나요?', pron:'위 아 어 리틀 숏 온 캐시. 캔 위 페이 바이 큐알 코드 앳 더 레스토랑 앤 포 더 카?', tip:''},
+    {who:'them', example:true, ts:at(4), src:'You can pay by QR for driver and restaurant',
+     en:'You can pay by QR for the driver and the restaurant.', ko:'기사님과 식당 모두 QR로 결제하실 수 있어요.',
+     replies:[
+       {ko:'좋아요! 그럼 차도 예약해 주세요.', en:'Great! Then please book the car for us too.', pron:'그레잇! 덴 플리즈 북 더 카 포 어스 투.'},
+       {ko:'식사하는 동안 짐을 맡겨도 될까요?', en:'Can we leave our suitcases at the restaurant during dinner?', pron:'캔 위 리브 아워 슛케이시즈 앳 더 레스토랑 듀링 디너?'},
+       {ko:'감사합니다! 30일에 봬요.', en:'Thank you so much! See you on the 30th.', pron:'땡큐 쏘 머치! 씨 유 온 더 써티스.'}
+     ]}
+  ];
+}
 
 const $ = id => document.getElementById(id);
-const log = $('log'), box = $('box'), form = $('form'), sendBtn = $('send'), statusEl = $('status'), micBtn = $('mic');
+const log = $('log'), box = $('box'), form = $('form'), sendBtn = $('send'), statusEl = $('status'), micBtn = $('mic'), whoBtn = $('who');
 
 function read(k){ try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } }
 function write(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
 
 let state = read(KEY);
-if (!state || !Array.isArray(state.items)) state = {situation:'호텔', mode:'me', items: EXAMPLE.map(i => ({...i}))};
+if (!state || !Array.isArray(state.items)) state = {situation:'식당·카페', items: exampleItems()};
 let settings = Object.assign({key:'', model:MODELS[0].id}, read(SETTINGS_KEY) || {});
 if (!MODELS.some(m => m.id === settings.model)) settings.model = MODELS[0].id;
 let usage = Object.assign({n:0, usd:0}, read(USAGE_KEY) || {});
-let busy = false, pending = null;
+let busy = false, pending = null, sample = null, sampleChecked = false;
+let who = 'me', whoLocked = false;
 
 const save = () => write(KEY, state);
 const saveSettings = () => write(SETTINGS_KEY, settings);
+const needsKey = () => !IN_CLAUDE && !settings.key;
+
+/* ---------- time ---------- */
+const fmtTime = new Intl.DateTimeFormat('ko-KR', {hour:'numeric', minute:'2-digit'});
+const fmtDay = new Intl.DateTimeFormat('ko-KR', {year:'numeric', month:'long', day:'numeric', weekday:'long'});
+const dayKey = ts => new Date(ts).toDateString();
+const minKey = ts => Math.floor(ts / 60000);
 
 /* ---------- rendering ---------- */
 function el(tag, cls, text){ const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
-function act(label, action, idx){ const b = el('button','act',label); b.type='button'; b.dataset.act=action; b.dataset.idx=idx; return b; }
 const canSpeak = 'speechSynthesis' in window;
 
 function render(){
   log.textContent = '';
-  if (!settings.key) {
+  if (needsKey()) {
     const n = el('div','note key');
-    n.append(el('b',null,'번역하려면 Claude API 키가 필요해요.'),
-      '설정에서 키를 한 번 넣어 두면 이 기기에서 계속 쓸 수 있어요.');
-    const b = el('button','primary','설정 열기'); b.type='button'; b.onclick = openSettings;
-    n.append(b);
-    log.append(n);
+    n.append(el('b',null,'번역하려면 Claude API 키가 필요해요.'), '설정에서 키를 한 번 넣어 두면 이 기기에서 계속 쓸 수 있어요.');
+    const b = el('button','primary','설정 열기'); b.type = 'button'; b.onclick = openSettings;
+    n.append(b); log.append(n);
   }
-  if (state.items.some(i => i.example)) {
-    const n = el('div','note');
-    n.append(el('b',null,'예시 대화예요. '), '호텔 체크인 상황을 보여 주는 샘플이고, 처음 번역을 보내면 자동으로 지워져요.');
-    log.append(n);
-  }
+  if (state.items.some(i => i.example)) log.append(el('div','note','예시 대화예요. 처음 메시지를 보내면 자동으로 지워져요.'));
   if (!state.items.length && !pending) {
     const e = el('div','empty');
     e.append(el('strong',null,'대화를 시작해 보세요'),
-      '내가 먼저 말할 땐 ‘내가 말하기’에 한국어로 적고,', el('br'),
-      '상대가 먼저 말했다면 ‘상대방이 한 말’에 그 말을 넣어 주세요.', el('br'),
-      '마이크 버튼을 누르고 말해도 돼요.');
+      '한국어로 적으면 영어로, 영어로 적으면 한국어로 바꿔 줘요.', el('br'),
+      '한국어는 내 말(오른쪽), 영어는 상대 말(왼쪽)로 들어가요.', el('br'),
+      '왼쪽 동그란 버튼을 누르면 누구 말인지 직접 바꿀 수 있어요.');
     log.append(e);
   }
-  state.items.forEach((it, idx) => log.append(it.who === 'me' ? meRow(it, idx) : themRow(it, idx)));
-  if (pending) log.append(pendingRow(pending));
+  const list = pending ? state.items.concat([pending]) : state.items;
+  let prev = null;
+  list.forEach((it, i) => {
+    const ts = it.ts || 0, next = list[i + 1];
+    if (ts && (!prev || !prev.ts || dayKey(prev.ts) !== dayKey(ts))) log.append(el('div','day',fmtDay.format(ts)));
+    const first = !prev || prev.who !== it.who || (ts && prev.ts && dayKey(prev.ts) !== dayKey(ts));
+    const last = !next || next.who !== it.who || !ts || !next.ts || minKey(next.ts) !== minKey(ts);
+    log.append(row(it, it === pending ? -1 : i, first, last));
+    prev = it;
+  });
+  renderQuick();
 }
 
-function meRow(it, idx){
-  const row = el('div','row me'), who = el('div','who');
-  who.append(el('span','tag','나'));
-  if (it.example) who.append(el('span','ex','예시'));
-  const b = el('div','bub');
-  b.append(el('div','en',it.en), el('div','ko','뜻: ' + it.ko));
-  if (it.pron) b.append(el('div','pron','발음: ' + it.pron));
-  if (it.tip) b.append(el('div','tip',it.tip));
-  const a = el('div','acts');
-  a.append(act('크게 보여주기','big',idx));
-  if (canSpeak) a.append(act('소리로 듣기','speak',idx));
-  a.append(act('복사','copy',idx));
-  b.append(a);
-  row.append(who, b);
-  if (it.src && it.src !== it.ko) row.append(el('div','src','내가 입력한 말: ' + it.src));
-  return row;
-}
-
-function themRow(it, idx){
-  const row = el('div','row them'), who = el('div','who');
-  who.append(el('span','tag','상대방'));
-  if (it.example) who.append(el('span','ex','예시'));
-  const b = el('div','bub');
-  b.append(el('div','en',it.en), el('div','ko','뜻: ' + it.ko));
-  if (canSpeak) { const a = el('div','acts'); a.append(act('다시 듣기','speak',idx)); b.append(a); }
-  row.append(who, b);
-  if (Array.isArray(it.replies) && it.replies.length && idx === state.items.length - 1) {
-    const r = el('div','replies');
-    r.append(el('div','lbl','이렇게 답할 수 있어요 · 누르면 바로 내 말로 들어가요'));
-    it.replies.forEach((rp, ri) => {
-      const btn = el('button','reply'); btn.type='button'; btn.dataset.act='reply'; btn.dataset.idx=idx; btn.dataset.ri=ri;
-      btn.append(el('span','rk',rp.ko), el('span','re',rp.en));
-      r.append(btn);
-    });
-    row.append(r);
+function row(it, idx, first, last){
+  const m = el('div', 'msg ' + it.who + (first ? ' first' : '') + (idx < 0 ? ' pending' : ''));
+  const col = el('div','col');
+  if (it.who === 'them') {
+    m.append(el('div', 'avatar' + (first ? '' : ' blank'), 'A'));
+    if (first) col.append(el('div','name','상대방'));
   }
-  return row;
+  const line = el('div','line');
+  const b = el('button','bub'); b.type = 'button';
+  if (idx < 0) {
+    b.disabled = true;
+    b.append(el('div','en',it.text));
+    const k = el('div','ko'); k.append(el('span','dots','번역 중')); b.append(k);
+  } else {
+    b.dataset.idx = idx;
+    b.append(el('div','en',it.en), el('div','ko',it.ko));
+    if (it.tip) b.append(el('div','tip',it.tip));
+  }
+  line.append(b);
+  if (last && it.ts) line.append(el('span','time',fmtTime.format(it.ts)));
+  col.append(line);
+  m.append(col);
+  return m;
 }
 
-function pendingRow(p){
-  const row = el('div','row ' + p.who + ' pending'), who = el('div','who');
-  who.append(el('span','tag', p.who === 'me' ? '나' : '상대방'));
-  const b = el('div','bub');
-  b.append(el('div','en',p.text));
-  const s = el('div','ko'); s.append(el('span','dots','번역 중'));
-  b.append(s);
-  row.append(who, b);
-  return row;
+function renderQuick(){
+  const lastIt = state.items[state.items.length - 1];
+  const show = !pending && lastIt && lastIt.who === 'them' && Array.isArray(lastIt.replies) && lastIt.replies.length;
+  $('quick').hidden = !show;
+  const chips = $('chips'); chips.textContent = '';
+  if (!show) return;
+  lastIt.replies.forEach(rp => {
+    const c = el('button','chip'); c.type = 'button';
+    c.append(el('span','ck',rp.ko), el('span','ce',rp.en));
+    c.onclick = () => {
+      if (state.items.some(i => i.example)) state.items = state.items.filter(i => !i.example);
+      state.items.push({who:'me', ts:Date.now(), src:rp.ko, en:rp.en, ko:rp.ko, pron:rp.pron, tip:''});
+      save(); render(); scrollDown();
+    };
+    chips.append(c);
+  });
 }
 
 function scrollDown(){ const m = $('scroller'); m.scrollTop = m.scrollHeight; }
 
-/* ---------- mode & situation ---------- */
-function setMode(m){
-  if (rec) rec.stop();
-  state.mode = m;
-  document.querySelectorAll('.mode').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
-  sendBtn.classList.toggle('them', m === 'them');
-  box.placeholder = m === 'me' ? '할 말을 한국어로 적어 주세요' : '상대가 한 말을 적어 주세요';
-  $('hint').textContent = SR
-    ? (m === 'me' ? '마이크를 누르고 한국어로 말하면 바로 번역돼요.' : '마이크를 누르고 상대에게 영어로 말해 달라고 하세요.')
-    : (m === 'me' ? '말로 입력: 키보드의 마이크 버튼을 누르고 말하세요.' : '말로 입력: 키보드를 English로 바꾸고 마이크 버튼을 누르세요.');
-  save();
+/* ---------- who is speaking (auto: 한글이면 나, 영어면 상대) ---------- */
+function setWho(w, locked){
+  if (rec && w !== who) rec.stop();
+  who = w; whoLocked = !!locked;
+  whoBtn.dataset.who = w;
+  whoBtn.textContent = '';
+  whoBtn.append(w === 'me' ? '나' : '상대', el('small', null, w === 'me' ? '→EN' : '→KO'));
+  whoBtn.setAttribute('aria-label', (w === 'me' ? '내 말' : '상대 말') + '로 보내요. 눌러서 바꾸기');
 }
+function guessWho(text){
+  const ko = (text.match(/[가-힣ㄱ-ㅎㅏ-ㅣ]/g) || []).length;
+  const en = (text.match(/[A-Za-z]/g) || []).length;
+  if (!ko && !en) return null;
+  return ko >= en / 3 ? 'me' : 'them';
+}
+whoBtn.onclick = () => setWho(who === 'me' ? 'them' : 'me', true);
+box.addEventListener('input', () => {
+  autosize();
+  if (!whoLocked) { const g = guessWho(box.value); if (g) setWho(g, false); }
+});
+
 const sitSel = $('sit');
-SITUATIONS.forEach(s => sitSel.append(new Option(s, s)));
+SITUATIONS.forEach(s => sitSel.append(new Option('상황: ' + s, s)));
 if (!SITUATIONS.includes(state.situation)) state.situation = '일반 대화';
 sitSel.value = state.situation;
 sitSel.onchange = () => { state.situation = sitSel.value; save(); };
-document.querySelectorAll('.mode').forEach(b => b.onclick = () => setMode(b.dataset.mode));
 
-/* ---------- Claude ---------- */
-const SYSTEM = `You are a live interpreter on a Korean traveler's phone, helping them talk face to face with an English speaker.
+/* ---------- prompts ---------- */
+const SYSTEM = `You are a live interpreter on a Korean traveler's phone, helping them talk with an English speaker (face to face or in a messenger chat).
 English you write is natural, short and easy to say aloud: everyday words, polite but not stiff.
-Use the conversation so far for context: respond to what was just said, and keep names, numbers and references consistent.
+Use the conversation so far for context: respond to what was just said, and keep names, numbers, dates and references consistent.
 Keep the speaker's meaning and never add facts.
 Korean you write is natural everyday Korean. Pronunciation guides are Hangul spellings of how a Korean speaker would say the English aloud.`;
 
@@ -415,9 +449,7 @@ const SCHEMA_THEM = {
 };
 
 function history(){
-  const lines = state.items.filter(i => !i.example).slice(-12).map(i => i.who === 'me'
-    ? `Korean speaker: ${i.en}`
-    : `English speaker: ${i.en}`);
+  const lines = state.items.filter(i => !i.example).slice(-14).map(i => (i.who === 'me' ? 'Korean speaker: ' : 'English speaker: ') + i.en);
   return lines.length ? lines.join('\n') : '(no conversation yet)';
 }
 function promptMe(text){
@@ -428,8 +460,8 @@ ${history()}
 The Korean speaker wants to say this next:
 """${text}"""
 
-- en: what they want to say, in natural spoken English (if the input is already English, just make it natural)
-- ko: the Korean meaning of your English sentence, so they can check it
+- en: what they want to say, in natural English (if the input is already English, just make it natural; keep line breaks and numbered lists)
+- ko: the Korean meaning of your English, so they can check it
 - pron: Hangul pronunciation guide for en
 - tip: one short Korean note only if the input was ambiguous or there is something important to know when saying it (for example tipping or politeness); otherwise an empty string`;
 }
@@ -438,17 +470,36 @@ function promptThem(text){
 Conversation so far, oldest first:
 ${history()}
 
-The English speaker just said this. It was typed or dictated, so it may have typos or no punctuation. It may also be the Korean speaker's rough Korean summary of what was said.
+The English speaker just said this. It may have typos, missing words or no punctuation. It may also be the Korean speaker's rough Korean summary of what was said.
 """${text}"""
 
-- en: their sentence in clean English (fix dictation errors only; if the input is Korean, give the English they most likely said)
+- en: their message in clean English (fix only obvious typos or dictation errors; if the input is Korean, give the English they most likely said)
 - ko: natural Korean translation that uses the conversation context
-- replies: 2 or 3 short replies the Korean speaker would most likely want to say next, each with ko, en (simple spoken English) and pron (Hangul pronunciation guide of en)`;
+- replies: exactly 3 short replies the Korean speaker would most likely want to send next, each different in intent (for example agree, ask a follow-up question, decline or thank), each with ko, en (simple English) and pron (Hangul pronunciation guide of en)`;
+}
+const SHAPE_ME = '{"en":"...","ko":"...","pron":"...","tip":""}';
+const SHAPE_THEM = '{"en":"...","ko":"...","replies":[{"ko":"...","en":"...","pron":"..."},{"ko":"...","en":"...","pron":"..."},{"ko":"...","en":"...","pron":"..."}]}';
+
+/* ---------- engines ---------- */
+class AppError extends Error {}
+
+const SAMPLE_ERR = {
+  not_granted: '이 페이지가 Claude를 쓰도록 허용해야 번역돼요. 페이지를 다시 열고 허용을 눌러 주세요.',
+  sampling_disabled: '이 계정에서는 Claude 번역을 쓸 수 없어요.',
+  rate_limited: '요청이 너무 많아 잠시 멈췄어요. 조금 뒤에 다시 보내 주세요.',
+  session_expired: 'claude.ai에 다시 로그인한 뒤 보내 주세요.',
+  refused: '이 문장은 번역하지 못했어요. 표현을 바꿔서 다시 보내 주세요.',
+};
+async function askSample(prompt, shape){
+  if (!sample) throw new AppError(sampleChecked ? '번역은 claude.ai 안에서 열었을 때만 돼요.' : '번역 기능을 준비하고 있어요. 잠시 뒤 다시 보내 주세요.');
+  try {
+    return await sample.json(SYSTEM + '\n\n' + prompt + '\n\nReply with only JSON in this shape: ' + shape, {modelTier:'quick', cache:false});
+  } catch (e) {
+    throw new AppError(SAMPLE_ERR[e && e.code] || '번역을 받지 못했어요. 한 번 더 보내 주세요.');
+  }
 }
 
-class ApiError extends Error { constructor(msg){ super(msg); } }
-
-async function askClaude(userText, schema, opts = {}){
+async function askApi(userText, schema, opts = {}){
   const model = opts.model || settings.model;
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), 45000);
@@ -463,27 +514,26 @@ async function askClaude(userText, schema, opts = {}){
         'anthropic-dangerous-direct-browser-access':'true',
       },
       body: JSON.stringify({
-        model, max_tokens: 4000,
-        system: SYSTEM,
+        model, max_tokens: 4000, system: SYSTEM,
         output_config: schema ? {effort:'low', format:{type:'json_schema', schema}} : {effort:'low'},
         messages:[{role:'user', content:userText}],
       }),
     });
   } catch (e) {
-    throw new ApiError(e && e.name === 'AbortError' ? '응답이 너무 늦어요. 다시 보내 주세요.' : '인터넷에 연결되지 않았어요. 연결을 확인해 주세요.');
+    throw new AppError(e && e.name === 'AbortError' ? '응답이 너무 늦어요. 다시 보내 주세요.' : '인터넷에 연결되지 않았어요. 연결을 확인해 주세요.');
   } finally { clearTimeout(timer); }
 
   let data = null;
   try { data = await res.json(); } catch {}
   if (!res.ok) {
     const msg = (data && data.error && data.error.message) || '';
-    if (res.status === 401) throw new ApiError('API 키가 맞지 않아요. 설정에서 키를 다시 넣어 주세요.');
-    if (res.status === 403) throw new ApiError('이 키로는 이 모델을 쓸 수 없어요. 설정에서 다른 모델을 골라 보세요.');
-    if (res.status === 404) throw new ApiError('모델을 찾을 수 없어요. 설정에서 다른 모델을 골라 보세요.');
-    if (res.status === 429) throw new ApiError('요청이 너무 많거나 한도에 닿았어요. 조금 뒤에 다시 보내 주세요.');
-    if (res.status >= 500) throw new ApiError('Claude 서버가 바빠요. 잠시 뒤 다시 보내 주세요.');
-    if (/credit/i.test(msg)) throw new ApiError('크레딧이 부족해요. console.anthropic.com에서 충전해 주세요.');
-    throw new ApiError('요청이 거절됐어요. (' + (msg || res.status) + ')');
+    if (res.status === 401) throw new AppError('API 키가 맞지 않아요. 설정에서 키를 다시 넣어 주세요.');
+    if (res.status === 403) throw new AppError('이 키로는 이 모델을 쓸 수 없어요. 설정에서 다른 모델을 골라 보세요.');
+    if (res.status === 404) throw new AppError('모델을 찾을 수 없어요. 설정에서 다른 모델을 골라 보세요.');
+    if (res.status === 429) throw new AppError('요청이 너무 많거나 한도에 닿았어요. 조금 뒤에 다시 보내 주세요.');
+    if (res.status >= 500) throw new AppError('Claude 서버가 바빠요. 잠시 뒤 다시 보내 주세요.');
+    if (/credit/i.test(msg)) throw new AppError('크레딧이 부족해요. console.anthropic.com에서 충전해 주세요.');
+    throw new AppError('요청이 거절됐어요. (' + (msg || res.status) + ')');
   }
 
   const u = data.usage || {};
@@ -492,11 +542,17 @@ async function askClaude(userText, schema, opts = {}){
   usage.usd += ((u.input_tokens || 0) * rate[0] + (u.output_tokens || 0) * rate[1]) / 1e6;
   write(USAGE_KEY, usage);
 
-  if (data.stop_reason === 'refusal') throw new ApiError('이 문장은 번역하지 못했어요. 표현을 바꿔서 다시 보내 주세요.');
-  if (data.stop_reason === 'max_tokens') throw new ApiError('답이 중간에 끊겼어요. 한 번 더 보내 주세요.');
+  if (data.stop_reason === 'refusal') throw new AppError('이 문장은 번역하지 못했어요. 표현을 바꿔서 다시 보내 주세요.');
+  if (data.stop_reason === 'max_tokens') throw new AppError('답이 중간에 끊겼어요. 한 번 더 보내 주세요.');
   const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
   if (!schema) return text;
-  try { return JSON.parse(text); } catch { throw new ApiError('번역을 받지 못했어요. 한 번 더 보내 주세요.'); }
+  try { return JSON.parse(text); } catch { throw new AppError('번역을 받지 못했어요. 한 번 더 보내 주세요.'); }
+}
+
+function translate(kind, text){
+  return kind === 'me'
+    ? (IN_CLAUDE ? askSample(promptMe(text), SHAPE_ME) : askApi(promptMe(text), SCHEMA_ME))
+    : (IN_CLAUDE ? askSample(promptThem(text), SHAPE_THEM) : askApi(promptThem(text), SCHEMA_THEM));
 }
 
 /* ---------- sending ---------- */
@@ -505,30 +561,29 @@ const str = v => (typeof v === 'string' ? v.trim() : '');
 
 async function send(text){
   if (busy || !text) return;
-  if (!settings.key) { showStatus('먼저 설정에서 Claude API 키를 넣어 주세요.'); openSettings(); return; }
-  const who = state.mode;
+  if (needsKey()) { showStatus('먼저 설정에서 Claude API 키를 넣어 주세요.'); openSettings(); return; }
+  const kind = whoLocked ? who : (guessWho(text) || who);
   if (state.items.some(i => i.example)) state.items = state.items.filter(i => !i.example);
   busy = true; sendBtn.disabled = true; showStatus('');
-  pending = {who, text}; box.value = ''; autosize();
+  pending = {who:kind, text, ts:Date.now()};
+  box.value = ''; autosize();
   render(); scrollDown();
   try {
-    if (who === 'me') {
-      const r = await askClaude(promptMe(text), SCHEMA_ME);
-      if (!str(r.en) || !str(r.ko)) throw new ApiError('번역을 받지 못했어요. 한 번 더 보내 주세요.');
-      state.items.push({who:'me', src:text, en:str(r.en), ko:str(r.ko), pron:str(r.pron), tip:str(r.tip)});
+    const r = await translate(kind, text);
+    if (!r || !str(r.en) || !str(r.ko)) throw new AppError('번역을 받지 못했어요. 한 번 더 보내 주세요.');
+    if (kind === 'me') {
+      state.items.push({who:'me', ts:pending.ts, src:text, en:str(r.en), ko:str(r.ko), pron:str(r.pron), tip:str(r.tip)});
     } else {
-      const r = await askClaude(promptThem(text), SCHEMA_THEM);
-      if (!str(r.en) || !str(r.ko)) throw new ApiError('번역을 받지 못했어요. 한 번 더 보내 주세요.');
       const replies = (Array.isArray(r.replies) ? r.replies : [])
         .map(x => ({ko:str(x && x.ko), en:str(x && x.en), pron:str(x && x.pron)}))
         .filter(x => x.ko && x.en).slice(0, 3);
-      state.items.push({who:'them', src:text, en:str(r.en), ko:str(r.ko), replies});
-      setMode('me');
+      state.items.push({who:'them', ts:pending.ts, src:text, en:str(r.en), ko:str(r.ko), replies});
     }
     save();
+    setWho(kind === 'them' ? 'me' : who, false);
   } catch (e) {
     box.value = text; autosize();
-    showStatus(e instanceof ApiError ? e.message : '번역을 받지 못했어요. 한 번 더 보내 주세요.');
+    showStatus(e instanceof AppError ? e.message : '번역을 받지 못했어요. 한 번 더 보내 주세요.');
   } finally {
     busy = false; pending = null; sendBtn.disabled = false;
     render(); scrollDown();
@@ -542,18 +597,18 @@ box.addEventListener('keydown', e => {
   }
 });
 function autosize(){ box.style.height = 'auto'; box.style.height = Math.min(box.scrollHeight + 2, innerHeight * .3) + 'px'; }
-box.addEventListener('input', autosize);
 
-/* ---------- microphone (Safari 받아쓰기) ---------- */
+/* ---------- microphone (홈 화면 앱에서만: Safari 음성 인식) ---------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let rec = null, heard = '';
-micBtn.hidden = !SR;
+micBtn.hidden = IN_CLAUDE || !SR;
 function setMicUI(on){ micBtn.classList.toggle('on', on); micBtn.setAttribute('aria-label', on ? '듣기 멈추기' : '말해서 입력'); }
 micBtn.onclick = () => {
   if (rec) { rec.stop(); return; }
   if (busy) return;
   try { rec = new SR(); } catch { rec = null; showStatus('이 기기에서는 마이크 입력을 쓸 수 없어요. 키보드의 마이크 버튼을 써 주세요.'); return; }
-  rec.lang = state.mode === 'me' ? 'ko-KR' : 'en-US';
+  const kind = who;
+  rec.lang = kind === 'me' ? 'ko-KR' : 'en-US';
   rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
   heard = '';
   rec.onresult = e => { let t = ''; for (const r of e.results) t += r[0].transcript; heard = t; box.value = t; autosize(); };
@@ -564,12 +619,51 @@ micBtn.onclick = () => {
     else if (e.error === 'no-speech') showStatus('말소리를 듣지 못했어요. 다시 눌러 말해 주세요.');
     else if (e.error !== 'aborted') showStatus('음성 인식이 멈췄어요. 다시 눌러 주세요.');
   };
-  rec.onend = () => { rec = null; setMicUI(false); const t = heard.trim(); heard = ''; if (t) send(t); };
+  rec.onend = () => {
+    rec = null; setMicUI(false);
+    const t = heard.trim(); heard = '';
+    if (t) { setWho(kind, true); send(t); }
+  };
   try { rec.start(); setMicUI(true); showStatus(''); }
   catch { rec = null; showStatus('음성 인식을 시작하지 못했어요. 다시 눌러 주세요.'); }
 };
 
-/* ---------- card actions ---------- */
+/* ---------- message menu ---------- */
+let menuIdx = -1;
+log.addEventListener('click', e => {
+  const b = e.target.closest('.bub[data-idx]'); if (!b) return;
+  const it = state.items[+b.dataset.idx]; if (!it) return;
+  menuIdx = +b.dataset.idx;
+  $('menuEn').textContent = it.en;
+  const meta = $('menuMeta'); meta.textContent = '';
+  meta.append(el('div', null, '뜻: ' + it.ko));
+  if (it.pron) meta.append(el('div', null, '발음: ' + it.pron));
+  if (it.src && it.src !== it.en && it.src !== it.ko) meta.append(el('div', null, (it.who === 'me' ? '내가 입력한 말: ' : '받은 원문: ') + it.src));
+  $('menu').querySelector('[data-m="speak"]').hidden = !canSpeak;
+  $('menu').hidden = false;
+});
+$('menu').addEventListener('click', e => {
+  const t = e.target.closest('[data-m]');
+  if (!t) { if (e.target === $('menu')) $('menu').hidden = true; return; }
+  const it = state.items[menuIdx], m = t.dataset.m;
+  if (m === 'close' || !it) { $('menu').hidden = true; return; }
+  if (m === 'big') { $('menu').hidden = true; openBig(it); }
+  else if (m === 'speak') speak(it.en);
+  else if (m === 'copy') {
+    const done = () => { t.textContent = '복사됨'; setTimeout(() => t.textContent = '영어 복사', 1400); };
+    try { navigator.clipboard.writeText(it.en).then(done, () => { t.textContent = '복사 안 됨'; }); }
+    catch { t.textContent = '복사 안 됨'; }
+  }
+  else if (m === 'delete') {
+    if (t.dataset.arm !== '1') { t.dataset.arm = '1'; t.textContent = '한 번 더 누르면 지워요'; return; }
+    state.items.splice(menuIdx, 1); save(); $('menu').hidden = true; render();
+  }
+});
+function resetMenuButtons(){
+  const d = $('menu').querySelector('[data-m="delete"]'); d.dataset.arm = ''; d.textContent = '이 메시지 지우기';
+}
+new MutationObserver(resetMenuButtons).observe($('menu'), {attributes:true, attributeFilter:['hidden']});
+
 function speak(t){
   try {
     speechSynthesis.cancel();
@@ -588,26 +682,7 @@ function openBig(it){
 }
 $('bigClose').onclick = () => { $('big').hidden = true; };
 $('bigSpeak').onclick = () => speak(bigText);
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { $('big').hidden = true; $('sheet').hidden = true; } });
-
-log.addEventListener('click', e => {
-  const b = e.target.closest('[data-act]'); if (!b) return;
-  const it = state.items[+b.dataset.idx]; if (!it) return;
-  const a = b.dataset.act;
-  if (a === 'big') openBig(it);
-  else if (a === 'speak') speak(it.en);
-  else if (a === 'copy') {
-    const done = () => { b.textContent = '복사됨'; setTimeout(() => b.textContent = '복사', 1400); };
-    try { navigator.clipboard.writeText(it.en).then(done, () => { b.textContent = '길게 눌러 복사'; }); }
-    catch { b.textContent = '길게 눌러 복사'; }
-  }
-  else if (a === 'reply') {
-    const rp = it.replies[+b.dataset.ri]; if (!rp) return;
-    if (it.example) state.items = state.items.filter(i => !i.example);
-    state.items.push({who:'me', src:rp.ko, en:rp.en, ko:rp.ko, pron:rp.pron, tip:''});
-    setMode('me'); save(); render(); scrollDown();
-  }
-});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { $('big').hidden = true; $('sheet').hidden = true; $('menu').hidden = true; } });
 
 /* ---------- new conversation (two taps) ---------- */
 const resetBtn = $('reset'); let armTimer = null;
@@ -618,10 +693,10 @@ resetBtn.onclick = () => {
     return;
   }
   clearTimeout(armTimer); resetBtn.classList.remove('arm'); resetBtn.textContent = '새 대화';
-  state.items = []; showStatus(''); setMode('me'); save(); render();
+  state.items = []; showStatus(''); setWho('me', false); save(); render();
 };
 
-/* ---------- settings ---------- */
+/* ---------- settings (홈 화면 앱에서만) ---------- */
 const keyInput = $('keyInput'), keyState = $('keyState'), keySave = $('keySave');
 function maskKey(k){ return k ? k.slice(0, 7) + '…' + k.slice(-4) : ''; }
 function renderSettings(){
@@ -641,32 +716,39 @@ function renderSettings(){
   $('usage').textContent = `번역 ${usage.n.toLocaleString('ko-KR')}번 · 약 $${usage.usd.toFixed(3)} (약 ${won.toLocaleString('ko-KR')}원)`;
 }
 function openSettings(){ renderSettings(); $('sheet').hidden = false; }
+function closeSettings(){ $('sheet').hidden = true; render(); }
+$('openSettings').hidden = IN_CLAUDE;
 $('openSettings').onclick = openSettings;
-$('sheetClose').onclick = () => { $('sheet').hidden = true; render(); };
-$('sheet').addEventListener('click', e => { if (e.target === $('sheet')) { $('sheet').hidden = true; render(); } });
+$('sheetClose').onclick = closeSettings;
+$('sheet').addEventListener('click', e => { if (e.target === $('sheet')) closeSettings(); });
 keySave.onclick = async () => {
   const k = keyInput.value.trim();
   if (!k) { keyState.className = 'small bad'; keyState.textContent = '키를 붙여 넣어 주세요.'; return; }
   if (!k.startsWith('sk-ant-')) { keyState.className = 'small bad'; keyState.textContent = 'Claude API 키는 sk-ant- 로 시작해요. 다시 확인해 주세요.'; return; }
   keySave.disabled = true; keyState.className = 'small'; keyState.textContent = '키를 확인하고 있어요…';
   try {
-    await askClaude('Reply with only the word OK.', null, {key:k});
+    await askApi('Reply with only the word OK.', null, {key:k});
     settings.key = k; saveSettings();
     renderSettings();
     keyState.className = 'small ok'; keyState.textContent = '확인됐어요. 저장된 키: ' + maskKey(k);
     showStatus('');
   } catch (e) {
     keyState.className = 'small bad';
-    keyState.textContent = e instanceof ApiError ? e.message : '키를 확인하지 못했어요.';
+    keyState.textContent = e instanceof AppError ? e.message : '키를 확인하지 못했어요.';
   } finally { keySave.disabled = false; }
 };
 $('keyClear').onclick = () => { settings.key = ''; saveSettings(); renderSettings(); };
 $('usageReset').onclick = () => { usage = {n:0, usd:0}; write(USAGE_KEY, usage); renderSettings(); };
 
 /* ---------- boot ---------- */
-setMode(state.mode === 'them' ? 'them' : 'me');
+setWho('me', false);
 render(); scrollDown();
-if ('serviceWorker' in navigator && location.protocol === 'https:') {
+if (IN_CLAUDE) {
+  window.claude.use('sample').then(s => {
+    sample = s; sampleChecked = true;
+    if (!s) showStatus('번역은 claude.ai 안에서 열었을 때만 돼요.');
+  });
+} else if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js', {scope:'./'}).catch(() => {});
 }
 </script>

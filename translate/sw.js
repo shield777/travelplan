@@ -1,6 +1,6 @@
 /* 오프라인 지원: 통역기 화면만 저장해요. 번역 요청(Anthropic API)은 저장하지 않아요.
    항상 네트워크를 먼저 쓰고, 연결이 없을 때만 저장해 둔 사본을 보여 줘요. */
-const CACHE = 'talk-translator-v1';
+const CACHE = 'talk-translator-v2';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
