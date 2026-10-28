@@ -429,6 +429,7 @@
           <button class="btn sm" data-act="backup">불러오기</button>
           <button class="btn primary sm" data-act="new-trip">${ICON.plus}새 여행</button>
         </header>
+        ${backupNote()}
         ${trips.some(x => x.example) ? `<div class="example-note"><span>예시 여행이 들어 있어요. 둘러본 뒤 지워도 돼요.</span><button class="btn sm" data-act="del-example">${ICON.trash}예시 지우기</button></div>` : ''}
         ${trips.length === 0 ? `<div class="empty">아직 여행이 없어요.<br>오른쪽 위 <b>새 여행</b>으로 연도·나라·여행지를 입력해 시작하세요.</div>` : ''}
         ${years.map(y => `
@@ -439,6 +440,29 @@
       </div>`;
   }
 
+  // 백업 알림: 끝난 여행이 있는데 그 뒤로 백업 파일을 안 만들었으면 홈에 알려요 ('나중에'는 3일 뒤 다시)
+  function backupDue() {
+    const today = todayStr();
+    const ended = state.trips.filter(t => !t.example && t.endDate && t.endDate < today).sort((a, b) => a.endDate.localeCompare(b.endDate));
+    const last = ended[ended.length - 1];
+    if (!last) return null;
+    if (ui.lastBackup && ui.lastBackup > last.endDate) return null;
+    if (ui.backupSnooze && diffDays(ui.backupSnooze, today) < 3) return null;
+    return last;
+  }
+  function backupNote() {
+    const t = backupDue(); if (!t) return '';
+    return `<div class="backup-note">
+      <span><b>${esc(t.city || tripName(t))} 여행이 끝났어요.</b> 기록이 사라지지 않게 <b>백업 파일</b>을 만들어 iCloud Drive에 저장해 두세요.${ui.lastBackup ? ` (마지막 백업 ${fmtD(ui.lastBackup)})` : ''}</span>
+      <div class="bk-btns"><button class="btn sm primary" data-act="backup-now">${ICON.save}백업 만들기</button><button class="btn sm" data-act="backup-pdf" data-id="${t.id}">${ICON.doc}PDF</button><button class="btn sm ghost" data-act="backup-later">나중에</button></div>
+    </div>`;
+  }
+  // 백업 파일 만들기 (모든 여행을 파일 하나에). 만든 날을 기억해서 알림을 꺼요
+  function makeBackup() {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    deliverFile(blob, `여행일정-백업-${todayStr()}.json`);
+    ui.lastBackup = todayStr(); delete ui.backupSnooze; saveUI();
+  }
   function tripCard(t) {
     const dd = dday(t);
     const total = (t.checklist || []).length, done = (t.checklist || []).filter(c => c.done).length;
@@ -1622,6 +1646,7 @@
       <hr class="sep">
       <p style="margin:0" class="note-small">여행 데이터는 지금 쓰는 기기의 브라우저에만 저장돼요. 아이폰과 아이패드는 서로 공유되지 않으니, 백업 파일을 iCloud Drive에 저장해 두고 다른 기기에서 불러오세요.</p>
       <button type="button" class="btn" id="b-export">${ICON.save}백업 파일 만들기 (.json)</button>
+      <div class="note-small" id="b-last">${ui.lastBackup ? `마지막 백업: ${fmtD(ui.lastBackup)}` : '아직 이 기기에서 백업 파일을 만든 적이 없어요.'}</div>
       <label class="field"><span>백업 파일 불러오기</span><input type="file" id="b-import" accept="application/json,.json"></label>
       <div class="ap-preview" id="b-msg"></div>`,
       `<button type="button" class="btn" data-close="1">닫기</button>`,
@@ -1634,10 +1659,7 @@
           const url = (text.match(/https?:\/\/\S+/) || [])[0] || '';
           openShared(m[1], url);
         });
-        $('#b-export', root).addEventListener('click', () => {
-          const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-          deliverFile(blob, `여행일정-백업-${todayStr()}.json`);
-        });
+        $('#b-export', root).addEventListener('click', () => { makeBackup(); $('#b-last', root).textContent = `마지막 백업: ${fmtD(ui.lastBackup)}`; });
         $('#b-import', root).addEventListener('change', e => {
           const file = e.target.files[0]; if (!file) return;
           const r = new FileReader();
@@ -2245,6 +2267,9 @@
       case 'family': familySheet(); break;
       case 'del-example': deleteTrips(x => x.example); toast('예시 여행을 지웠어요'); break;
       case 'backup': backupSheet(); break;
+      case 'backup-now': makeBackup(); render(); break;
+      case 'backup-pdf': { const bt = state.trips.find(x => x.id === id); if (bt) pdfSheet(bt); break; }
+      case 'backup-later': ui.backupSnooze = todayStr(); saveUI(); render(); toast('3일 뒤에 다시 알려 드릴게요'); break;
       case 'open-trip': selItem = null; ui.tripId = id; ui.view = 'trip'; ui.tab = ui.tab || 'plan'; render(); if (!jumpToToday()) window.scrollTo(0, 0); break;
       case 'home': selItem = null; ui.view = 'home'; render(); window.scrollTo(0, 0); break;
       case 'edit-trip': tripSheet(t); break;

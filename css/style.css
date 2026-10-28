@@ -181,6 +181,8 @@ body::before {
 
 .example-note { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 12px; padding: 10px 12px; border-radius: var(--r-sm); background: var(--warn-soft); font-size: 13px; }
 .example-note span { flex: 1; min-width: 0; }
+.backup-note { display: grid; gap: 8px; margin-top: 12px; padding: 10px 12px; border-radius: var(--r-sm); background: var(--accent-soft); font-size: 13px; }
+.backup-note .bk-btns { display: flex; flex-wrap: wrap; gap: 6px; }
 .btn.danger.armed, .btn.armed { background: var(--warn); border-color: var(--warn); color: var(--surface); }
 .empty {
   border: 1px dashed var(--line); border-radius: var(--r); padding: 20px; text-align: center; color: var(--muted); background: var(--surface);
