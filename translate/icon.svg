@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-<rect width="1024" height="1024" fill="#1F4FC4"/>
-<path d="M196 214h400a64 64 0 0 1 64 64v214a64 64 0 0 1-64 64H372l-112 92v-92h-64a64 64 0 0 1-64-64V278a64 64 0 0 1 64-64z" fill="#FFFFFF"/>
-<path d="M828 446H452a64 64 0 0 0-64 64v214a64 64 0 0 0 64 64h200l112 92v-92h64a64 64 0 0 0 64-64V510a64 64 0 0 0-64-64z" fill="#45BBA8"/>
-<text x="380" y="430" text-anchor="middle" font-family="IBM Plex Sans KR" font-weight="700" font-size="230" fill="#1F4FC4">가</text>
-<text x="640" y="702" text-anchor="middle" font-family="Atkinson Hyperlegible" font-weight="700" font-size="250" fill="#0A1226">A</text>
-</svg>
