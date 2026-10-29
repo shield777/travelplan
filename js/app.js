@@ -652,7 +652,7 @@
       app.querySelectorAll('.wx[data-d]').forEach(el => { el.outerHTML = wxSpan(t, el.dataset.d); });
     } catch (e) { /* 인터넷이 안 되면 날씨만 빼고 보여요 */ } finally { wxBusy = ''; }
   }
-  // 일차 날짜 옆 날씨 (예: ☀️ 맑음 31°/24° · 비 40%)
+  // 일차 제목 아래 한 줄 날씨 (예: ☀️ 맑음 31°/24° · 비 40%)
   function wxSpan(t, d) {
     const r = wxRange(t), geoKey = wxQueries(t).map(({ q, any }) => wx.geo[`${q}|${any ? '' : t.country}`]).find(g => g && g.lat != null);
     const f = r && geoKey && wx.fc[wxKeyOf(geoKey, r[0], r[1])], v = f && f.days[d];
@@ -681,7 +681,7 @@
         <div class="day-head">
           <div class="no">${i + 1}<small>일차</small></div>
           <div class="info">
-            <div class="date">${fmtDLong(d)}${d === today ? '<span class="today-tag">오늘</span>' : ''}${wxSpan(t, d)}</div>
+            <div class="date">${fmtDLong(d)}${d === today ? '<span class="today-tag">오늘</span>' : ''}</div>
             ${ro() ? (title ? `<div class="title">${esc(title)}</div>` : '')
               : `<div class="title ${title ? '' : 'placeholder'}" data-act="day-title" data-date="${d}" role="button" tabindex="0">${title ? esc(title) : '이날의 제목'}</div>`}
           </div>
@@ -691,6 +691,7 @@
             <button class="btn icon sm ghost" data-act="move-day" data-date="${d}" data-dir="1" ${i === last ? 'disabled' : ''} aria-label="${i + 1}일차를 뒷날로">${ICON.down}</button>
           </div>`}
         </div>
+        <div class="day-wx">${wxSpan(t, d)}</div>
         ${entries.length ? `<ul class="timeline">${(() => {
           const ids = entries.filter(e => e.kind === 'item').map(e => e.i.id); // 같은 날 일정끼리만 순서를 바꿔요
           return entries.map(e => e.kind === 'item' ? itemRow(e.i, false, money, t, { up: ids.indexOf(e.i.id) > 0, down: ids.indexOf(e.i.id) < ids.length - 1 }) : e.s ? stayRow(e.s, e.kind) : flightRow(e.f, e.kind === 'arrive')).join('');
