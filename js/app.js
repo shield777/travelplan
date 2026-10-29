@@ -588,14 +588,16 @@
   }
   // 여행 중이면 일정 탭을 열 때 오늘 일차 제목 바로 아래에 진행 중인 일정이 오게 해요
   // (일차 제목은 위에 붙어 있어서, 앞의 일정을 지나쳐도 몇 일차인지 보여요)
+  let lastJump = 0; // 날씨가 늦게 들어와 위에 붙은 제목이 길어지면 다시 맞추려고
   function jumpToToday() {
     if ((ui.view !== 'trip' && ui.view !== 'shared') || (ui.tab || 'plan') !== 'plan') return false;
     const el = $('#day-' + todayStr()); if (!el) return false;
     el.scrollIntoView({ block: 'start' });
-    const tabs = app.querySelector('.tabs'), head = el.querySelector('.day-head');
+    const tabs = app.querySelector('.tabs'), head = el.querySelector('.day-top');
     if (!tabs || !head) return true;
     const row = currentRow(el);
     const first = el.querySelector('.tl-item[data-t]:not([data-t=""])');
+    lastJump = Date.now();
     if (!row || row === first) window.scrollBy(0, el.getBoundingClientRect().top - tabs.getBoundingClientRect().bottom - 6);
     else window.scrollBy(0, row.getBoundingClientRect().top - tabs.getBoundingClientRect().bottom - head.offsetHeight - 8);
     return true;
@@ -676,6 +678,7 @@
       wxSave();
       app.querySelectorAll('.wx[data-d]').forEach(el => { el.outerHTML = wxSpan(t, el.dataset.d); });
       fitWx();
+      if (Date.now() - lastJump < 5000) jumpToToday();
     } catch (e) { /* 인터넷이 안 되면 날씨만 빼고 보여요 */ } finally { wxBusy = ''; }
   }
   // 시간별 날씨를 오전(6~11시)·오후(12~17시)·저녁(18~22시)으로: [대표 날씨(가장 궂은 것), 평균 기온, 최고 비 확률]
@@ -722,6 +725,7 @@
     const last = tripDays(t).length - 1;
     return `
       <section class="day" id="day-${d}">
+        <div class="day-top">
         <div class="day-head">
           <div class="no">${i + 1}<small>일차</small></div>
           <div class="info">
@@ -736,6 +740,7 @@
           </div>`}
         </div>
         <div class="day-wx">${wxSpan(t, d)}</div>
+        </div>
         ${entries.length ? `<ul class="timeline">${(() => {
           const ids = entries.filter(e => e.kind === 'item').map(e => e.i.id); // 같은 날 일정끼리만 순서를 바꿔요
           return entries.map(e => e.kind === 'item' ? itemRow(e.i, false, money, t, { up: ids.indexOf(e.i.id) > 0, down: ids.indexOf(e.i.id) < ids.length - 1 }) : e.s ? stayRow(e.s, e.kind) : flightRow(e.f, e.kind === 'arrive')).join('');
