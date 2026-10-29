@@ -530,6 +530,7 @@
       </div>
       ${moveBar(t, tab)}`;
     document.body.classList.toggle('has-move-bar', !!app.querySelector('.move-bar'));
+    if (tab === 'plan') loadWeather(t);
   }
 
   // 체크한 일정을 같은 날 안에서 위아래로 옮기는 아래 막대
@@ -599,6 +600,66 @@
     else window.scrollBy(0, row.getBoundingClientRect().top - tabs.getBoundingClientRect().bottom - head.offsetHeight - 8);
     return true;
   }
+  // ── 날씨: Open-Meteo(무료, 키 없음). 여행지 위치를 찾고, 일차별 날씨(지난날은 실제, 앞으로는 예보 최대 16일)를 보여 줘요
+  // 받은 날씨는 이 기기에만 1시간 보관해요 (여행 데이터에는 넣지 않아요)
+  const WX_KEY = 'travelplan.wx';
+  const wx = (() => { try { const o = JSON.parse(localStorage.getItem(WX_KEY)) || {}; return { geo: o.geo || {}, fc: o.fc || {} }; } catch (e) { return { geo: {}, fc: {} }; } })();
+  const wxSave = () => { try { localStorage.setItem(WX_KEY, JSON.stringify(wx)); } catch (e) { /* 무시 */ } };
+  const WMO = [[[0], '☀️', '맑음'], [[1], '🌤️', '대체로 맑음'], [[2], '⛅', '구름 조금'], [[3], '☁️', '흐림'], [[45, 48], '🌫️', '안개'],
+    [[51, 53, 55, 56, 57], '🌦️', '이슬비'], [[61, 63, 66], '🌧️', '비'], [[65, 67], '🌧️', '강한 비'], [[71, 73, 75, 77, 85, 86], '🌨️', '눈'],
+    [[80, 81], '🌦️', '소나기'], [[82], '🌧️', '강한 소나기'], [[95, 96, 99], '⛈️', '뇌우']];
+  const wmo = c => WMO.find(([cs]) => cs.includes(c)) || ['', '🌡️', ''];
+  // 위치 찾기에 쓸 이름들: 직접 넣은 '날씨 지역' → 여행지 → 도착 공항 이름(영문)
+  function wxQueries(t) {
+    if (t.wxPlace) return [{ q: t.wxPlace, any: true }];
+    const qs = [{ q: t.city }];
+    (t.flights || []).forEach(f => { const ap = findAp(f.arr); if (ap && ap.country === t.country && ap.en) qs.push({ q: ap.en.replace(/\b(International|Intl\.?|Airport|Air Base)\b/gi, '').replace(/[-–]/g, ' ').trim() }); });
+    return qs.filter(x => x.q);
+  }
+  async function wxGeo(t) {
+    for (const { q, any } of wxQueries(t)) {
+      const key = `${q}|${any ? '' : t.country}`;
+      if (wx.geo[key] && wx.geo[key].lat != null) return wx.geo[key];
+      if (wx.geo[key] && Date.now() - wx.geo[key].miss < 86400000) continue; // 못 찾은 이름은 하루 동안 다시 묻지 않아요
+      const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=10&language=ko&format=json`).then(r => r.json());
+      const list = (res && res.results) || [];
+      const hit = any ? list[0] : list.find(r => !t.country || String(r.country || '').includes(t.country.replace(/\(.*\)/, '').trim()));
+      if (hit) { wx.geo[key] = { lat: hit.latitude, lon: hit.longitude, name: hit.name }; wxSave(); return wx.geo[key]; }
+      wx.geo[key] = { miss: Date.now() }; wxSave();
+    }
+    return null;
+  }
+  const wxKeyOf = (g, a, b) => `${g.lat.toFixed(2)},${g.lon.toFixed(2)}|${a}|${b}`;
+  function wxRange(t) {
+    const today = todayStr(), a = t.startDate > addDays(today, -90) ? t.startDate : addDays(today, -90), b = t.endDate < addDays(today, 15) ? t.endDate : addDays(today, 15);
+    return a && b && a <= b ? [a, b] : null;
+  }
+  let wxBusy = '';
+  async function loadWeather(t) {
+    const r = wxRange(t); if (!r || wxBusy === t.id || !navigator.onLine) return;
+    wxBusy = t.id;
+    try {
+      const g = await wxGeo(t); if (!g) return;
+      const key = wxKeyOf(g, r[0], r[1]), hit = wx.fc[key];
+      if (!hit || Date.now() - hit.at > 3600000) {
+        const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${g.lat}&longitude=${g.lon}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&start_date=${r[0]}&end_date=${r[1]}`).then(x => x.json());
+        const d = res && res.daily; if (!d || !d.time) return;
+        const days = {};
+        d.time.forEach((day, i) => { days[day] = [d.weather_code[i], d.temperature_2m_max[i], d.temperature_2m_min[i], (d.precipitation_probability_max || [])[i]]; });
+        Object.keys(wx.fc).forEach(k => { if (Date.now() - wx.fc[k].at > 86400000) delete wx.fc[k]; }); // 하루 지난 건 정리
+        wx.fc[key] = { at: Date.now(), days, place: g.name }; wxSave();
+      }
+      app.querySelectorAll('.wx[data-d]').forEach(el => { el.outerHTML = wxSpan(t, el.dataset.d); });
+    } catch (e) { /* 인터넷이 안 되면 날씨만 빼고 보여요 */ } finally { wxBusy = ''; }
+  }
+  // 일차 날짜 옆 날씨 (예: ☀️ 맑음 31°/24° · 비 40%)
+  function wxSpan(t, d) {
+    const r = wxRange(t), geoKey = wxQueries(t).map(({ q, any }) => wx.geo[`${q}|${any ? '' : t.country}`]).find(g => g && g.lat != null);
+    const f = r && geoKey && wx.fc[wxKeyOf(geoKey, r[0], r[1])], v = f && f.days[d];
+    if (!v || v[1] == null) return `<span class="wx" data-d="${d}"></span>`;
+    const [icon, label] = wmo(v[0]).slice(1);
+    return `<span class="wx" data-d="${d}" title="${esc(f.place || '')} 날씨">${icon} ${label} ${Math.round(v[1])}°/${Math.round(v[2])}°${v[3] >= 30 ? ` · 비 ${v[3]}%` : ''}</span>`;
+  }
   function planTab(t) {
     const days = tripDays(t);
     const money = expTotals(t);
@@ -620,7 +681,7 @@
         <div class="day-head">
           <div class="no">${i + 1}<small>일차</small></div>
           <div class="info">
-            <div class="date">${fmtDLong(d)}${d === today ? '<span class="today-tag">오늘</span>' : ''}</div>
+            <div class="date">${fmtDLong(d)}${d === today ? '<span class="today-tag">오늘</span>' : ''}${wxSpan(t, d)}</div>
             ${ro() ? (title ? `<div class="title">${esc(title)}</div>` : '')
               : `<div class="title ${title ? '' : 'placeholder'}" data-act="day-title" data-date="${d}" role="button" tabindex="0">${title ? esc(title) : '이날의 제목'}</div>`}
           </div>
@@ -1073,6 +1134,7 @@
         <label class="field"><span>인원 <span class="hint">(선택) 1인당 경비 계산</span></span><input type="number" id="f-people" inputmode="numeric" min="1" max="50" value="${esc(t.people || '')}" placeholder="3"></label>
         <label class="field"><span>현지 통화</span><select id="f-cur"><option value="">나라에 맞게 자동</option>${Object.keys(CUR).map(c => `<option value="${c}" ${t.currency === c ? 'selected' : ''}>${c} · ${CUR[c][0]}</option>`).join('')}</select></label>
       </div>
+      <label class="field"><span>날씨 지역 <span class="hint">(선택) 날씨가 안 나오거나 다른 곳이면 영문 도시명 · 예: Nha Trang</span></span><input type="text" id="f-wx" value="${esc(t.wxPlace || '')}" placeholder="비우면 여행지로 찾아요"></label>
       <label class="field"><span>메모</span><textarea id="f-memo">${esc(t.memo)}</textarea></label>
       <div class="ap-preview" id="f-name-preview"></div>
       <div class="ap-preview" id="f-err" style="color:var(--warn)"></div>`,
@@ -1102,7 +1164,8 @@
           const country = val(root, 'f-country'), city = val(root, 'f-city'), s = val(root, 'f-start'), en = val(root, 'f-end');
           if (!country || !city || !s || !en) { $('#f-err', root).textContent = '나라, 여행지, 출발일, 돌아오는 날을 모두 입력해 주세요.'; return; }
           if (en < s) { $('#f-err', root).textContent = '돌아오는 날이 출발일보다 빨라요.'; return; }
-          const data = { year: Number(val(root, 'f-year')) || Number(s.slice(0, 4)), country, city, subtitle: val(root, 'f-sub'), startDate: s, endDate: en, memo: val(root, 'f-memo'), people: Number(val(root, 'f-people')) || '', currency: val(root, 'f-cur') };
+          const data = { year: Number(val(root, 'f-year')) || Number(s.slice(0, 4)), country, city, subtitle: val(root, 'f-sub'), startDate: s, endDate: en, memo: val(root, 'f-memo'), people: Number(val(root, 'f-people')) || '', currency: val(root, 'f-cur'), wxPlace: val(root, 'f-wx') };
+          if (!data.wxPlace) { delete data.wxPlace; if (!isNew) delete t.wxPlace; }
           if (isNew) {
             const nt = { id: uid(), ...data, dayTitles: {}, items: [], flights: [], stays: [], expenses: [], rates: {}, checklist: [] };
             state.trips.push(nt); ui.tripId = nt.id; ui.view = 'trip'; ui.tab = 'plan';
@@ -1913,6 +1976,7 @@
       flights: arr(t.flights).map(f => ({ id: sid(f.id), flightNo: str(f.flightNo, 10), dep: str(f.dep, 3).toUpperCase(), arr: str(f.arr, 3).toUpperCase(), depName: str(f.depName, 80), arrName: str(f.arrName, 80), depDate: date(f.depDate), depTime: time(f.depTime), arrDate: date(f.arrDate), arrTime: time(f.arrTime), depTerminal: str(f.depTerminal, 10), arrTerminal: str(f.arrTerminal, 10), gate: str(f.gate, 10), counter: str(f.counter, 20), seat: str(f.seat, 40), pnr: str(f.pnr, 20), memo: str(f.memo, 1000) })),
       people: Number(t.people) >= 1 && Number(t.people) <= 50 ? Math.round(Number(t.people)) : '',
       currency: typeof t.currency === 'string' && has(CUR, t.currency) ? t.currency : '',
+      ...(str(t.wxPlace, 60) ? { wxPlace: str(t.wxPlace, 60) } : {}),
       rates: Object.fromEntries(Object.entries(t.rates && typeof t.rates === 'object' ? t.rates : {})
         .filter(([c, r]) => has(CUR, c) && c !== 'KRW' && r && Number(r.v) > 0)
         .map(([c, r]) => [c, { v: Number(r.v), date: date(r.date), src: r.src === 'manual' ? 'manual' : 'auto' }])),
