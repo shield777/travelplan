@@ -600,10 +600,11 @@
     else window.scrollBy(0, row.getBoundingClientRect().top - tabs.getBoundingClientRect().bottom - head.offsetHeight - 8);
     return true;
   }
-  // ── 날씨: Open-Meteo(무료, 키 없음). 여행지 위치를 찾고, 일차별 날씨(지난날은 실제, 앞으로는 예보 최대 16일)를 보여 줘요
-  // 받은 날씨는 이 기기에만 1시간 보관해요 (여행 데이터에는 넣지 않아요)
+  // ── 날씨: Open-Meteo(무료, 키 없음). 일차별 날씨(지난날은 실제, 앞으로는 예보 최대 16일)를 보여 줘요
+  // 여행 중에는 휴대폰 위치(GPS)로 오늘 날씨를 받고, 그날 있었던 위치를 기억해서 지난날도 그 위치 날씨로 남겨요
+  // 받은 날씨·위치는 이 기기에만 보관해요 (여행 데이터에는 넣지 않아요)
   const WX_KEY = 'travelplan.wx';
-  const wx = (() => { try { const o = JSON.parse(localStorage.getItem(WX_KEY)) || {}; return { geo: o.geo || {}, fc: o.fc || {} }; } catch (e) { return { geo: {}, fc: {} }; } })();
+  const wx = (() => { try { const o = JSON.parse(localStorage.getItem(WX_KEY)) || {}; return { geo: o.geo || {}, days: o.days || {}, loc: o.loc || {} }; } catch (e) { return { geo: {}, days: {}, loc: {} }; } })();
   const wxSave = () => { try { localStorage.setItem(WX_KEY, JSON.stringify(wx)); } catch (e) { /* 무시 */ } };
   const WMO = [[[0], '☀️', '맑음'], [[1], '🌤️', '대체로 맑음'], [[2], '⛅', '구름 조금'], [[3], '☁️', '흐림'], [[45, 48], '🌫️', '안개'],
     [[51, 53, 55, 56, 57], '🌦️', '이슬비'], [[61, 63, 66], '🌧️', '비'], [[65, 67], '🌧️', '강한 비'], [[71, 73, 75, 77, 85, 86], '🌨️', '눈'],
@@ -616,9 +617,11 @@
     (t.flights || []).forEach(f => { const ap = findAp(f.arr); if (ap && ap.country === t.country && ap.en) qs.push({ q: ap.en.replace(/\b(International|Intl\.?|Airport|Air Base)\b/gi, '').replace(/[-–]/g, ' ').trim() }); });
     return qs.filter(x => x.q);
   }
+  const geoKeyOf = (t, q, any) => `${q}|${any ? '' : t.country}`;
+  const baseGeo = t => wxQueries(t).map(({ q, any }) => wx.geo[geoKeyOf(t, q, any)]).find(g => g && g.lat != null) || null;
   async function wxGeo(t) {
     for (const { q, any } of wxQueries(t)) {
-      const key = `${q}|${any ? '' : t.country}`;
+      const key = geoKeyOf(t, q, any);
       if (wx.geo[key] && wx.geo[key].lat != null) return wx.geo[key];
       if (wx.geo[key] && Date.now() - wx.geo[key].miss < 86400000) continue; // 못 찾은 이름은 하루 동안 다시 묻지 않아요
       const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=10&language=ko&format=json`).then(r => r.json());
@@ -629,36 +632,57 @@
     }
     return null;
   }
-  const wxKeyOf = (g, a, b) => `${g.lat.toFixed(2)},${g.lon.toFixed(2)}|${a}|${b}`;
+  const locKey = g => `${g.lat.toFixed(2)},${g.lon.toFixed(2)}`;
+  // 그날의 날씨 위치: 그날 기록한 휴대폰 위치가 있으면 그것, 없으면 여행지
+  const dayLoc = (t, d) => ((wx.loc[t.id] || {})[d]) || baseGeo(t);
   function wxRange(t) {
     const today = todayStr(), a = t.startDate > addDays(today, -90) ? t.startDate : addDays(today, -90), b = t.endDate < addDays(today, 15) ? t.endDate : addDays(today, 15);
     return a && b && a <= b ? [a, b] : null;
+  }
+  // 휴대폰 위치 (여행 중에만, 30분 안에 받은 건 다시 쓰기). 허락하지 않으면 null
+  let gpsAt = 0, gpsPos = null;
+  function gps() {
+    if (!navigator.geolocation) return Promise.resolve(null);
+    if (gpsPos && Date.now() - gpsAt < 1800000) return Promise.resolve(gpsPos);
+    return new Promise(res => navigator.geolocation.getCurrentPosition(
+      p => { gpsAt = Date.now(); gpsPos = { lat: p.coords.latitude, lon: p.coords.longitude, gps: true }; res(gpsPos); },
+      () => res(null), { enableHighAccuracy: false, timeout: 10000, maximumAge: 1800000 }));
   }
   let wxBusy = '';
   async function loadWeather(t) {
     const r = wxRange(t); if (!r || wxBusy === t.id || !navigator.onLine) return;
     wxBusy = t.id;
     try {
-      const g = await wxGeo(t); if (!g) return;
-      const key = wxKeyOf(g, r[0], r[1]), hit = wx.fc[key];
-      if (!hit || Date.now() - hit.at > 3600000) {
-        const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${g.lat}&longitude=${g.lon}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&start_date=${r[0]}&end_date=${r[1]}`).then(x => x.json());
-        const d = res && res.daily; if (!d || !d.time) return;
-        const days = {};
-        d.time.forEach((day, i) => { days[day] = [d.weather_code[i], d.temperature_2m_max[i], d.temperature_2m_min[i], (d.precipitation_probability_max || [])[i]]; });
-        Object.keys(wx.fc).forEach(k => { if (Date.now() - wx.fc[k].at > 86400000) delete wx.fc[k]; }); // 하루 지난 건 정리
-        wx.fc[key] = { at: Date.now(), days, place: g.name }; wxSave();
+      const today = todayStr();
+      if (today >= t.startDate && today <= t.endDate) { // 여행 중: 오늘 위치 기록 (오늘이 지나도 그 위치로 남아요)
+        const p = await gps();
+        if (p) { wx.loc[t.id] = wx.loc[t.id] || {}; wx.loc[t.id][today] = p; wxSave(); }
       }
+      await wxGeo(t);
+      // 위치가 같은 날끼리 묶어서 받아요. 지난날은 한 번 받으면 그대로, 오늘·앞으로는 1시간마다 새로
+      const groups = {};
+      for (let d = r[0]; d <= r[1]; d = addDays(d, 1)) {
+        const g = dayLoc(t, d); if (!g) continue;
+        const v = wx.days[`${locKey(g)}|${d}`];
+        if (v && (d < today || Date.now() - v[4] < 3600000)) continue;
+        (groups[locKey(g)] = groups[locKey(g)] || { g, ds: [] }).ds.push(d);
+      }
+      for (const { g, ds } of Object.values(groups)) {
+        const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${g.lat}&longitude=${g.lon}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&start_date=${ds[0]}&end_date=${ds[ds.length - 1]}`).then(x => x.json());
+        const dd = res && res.daily; if (!dd || !dd.time) continue;
+        dd.time.forEach((day, i) => { if (ds.includes(day)) wx.days[`${locKey(g)}|${day}`] = [dd.weather_code[i], dd.temperature_2m_max[i], dd.temperature_2m_min[i], (dd.precipitation_probability_max || [])[i], Date.now()]; });
+      }
+      const keys = Object.keys(wx.days); if (keys.length > 600) keys.sort((a, b) => wx.days[a][4] - wx.days[b][4]).slice(0, keys.length - 600).forEach(k => delete wx.days[k]);
+      wxSave();
       app.querySelectorAll('.wx[data-d]').forEach(el => { el.outerHTML = wxSpan(t, el.dataset.d); });
     } catch (e) { /* 인터넷이 안 되면 날씨만 빼고 보여요 */ } finally { wxBusy = ''; }
   }
-  // 일차 날짜 옆 날씨 (예: ☀️ 맑음 31°/24° · 비 40%)
+  // 일차 제목 아래 한 줄 날씨 (예: ☀️ 맑음 31°/24° · 비 40%, 휴대폰 위치 기준이면 📍)
   function wxSpan(t, d) {
-    const r = wxRange(t), geoKey = wxQueries(t).map(({ q, any }) => wx.geo[`${q}|${any ? '' : t.country}`]).find(g => g && g.lat != null);
-    const f = r && geoKey && wx.fc[wxKeyOf(geoKey, r[0], r[1])], v = f && f.days[d];
+    const g = dayLoc(t, d), v = g && wx.days[`${locKey(g)}|${d}`];
     if (!v || v[1] == null) return `<span class="wx" data-d="${d}"></span>`;
     const [icon, label] = wmo(v[0]).slice(1);
-    return `<span class="wx" data-d="${d}" title="${esc(f.place || '')} 날씨">${icon} ${label} ${Math.round(v[1])}°/${Math.round(v[2])}°${v[3] >= 30 ? ` · 비 ${v[3]}%` : ''}</span>`;
+    return `<span class="wx" data-d="${d}" title="${g.gps ? '휴대폰 위치' : esc(g.name || '')} 날씨">${g.gps ? '📍 ' : ''}${icon} ${label} ${Math.round(v[1])}°/${Math.round(v[2])}°${v[3] >= 30 ? ` · 비 ${v[3]}%` : ''}</span>`;
   }
   function planTab(t) {
     const days = tripDays(t);
@@ -681,7 +705,7 @@
         <div class="day-head">
           <div class="no">${i + 1}<small>일차</small></div>
           <div class="info">
-            <div class="date">${fmtDLong(d)}${d === today ? '<span class="today-tag">오늘</span>' : ''}${wxSpan(t, d)}</div>
+            <div class="date">${fmtDLong(d)}${d === today ? '<span class="today-tag">오늘</span>' : ''}</div>
             ${ro() ? (title ? `<div class="title">${esc(title)}</div>` : '')
               : `<div class="title ${title ? '' : 'placeholder'}" data-act="day-title" data-date="${d}" role="button" tabindex="0">${title ? esc(title) : '이날의 제목'}</div>`}
           </div>
@@ -691,6 +715,7 @@
             <button class="btn icon sm ghost" data-act="move-day" data-date="${d}" data-dir="1" ${i === last ? 'disabled' : ''} aria-label="${i + 1}일차를 뒷날로">${ICON.down}</button>
           </div>`}
         </div>
+        <div class="day-wx">${wxSpan(t, d)}</div>
         ${entries.length ? `<ul class="timeline">${(() => {
           const ids = entries.filter(e => e.kind === 'item').map(e => e.i.id); // 같은 날 일정끼리만 순서를 바꿔요
           return entries.map(e => e.kind === 'item' ? itemRow(e.i, false, money, t, { up: ids.indexOf(e.i.id) > 0, down: ids.indexOf(e.i.id) < ids.length - 1 }) : e.s ? stayRow(e.s, e.kind) : flightRow(e.f, e.kind === 'arrive')).join('');
