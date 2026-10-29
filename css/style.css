@@ -216,7 +216,8 @@ body::before {
 .day-head { padding-top: 6px; }
 /* 일차 제목과 날씨 줄이 함께 위에 붙어 있어요 */
 .day-top { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 64px + 48px); z-index: 3; background: var(--bg); padding-bottom: 6px; border-bottom: 2px solid var(--ink); }
-.day-top .day-head { border-bottom: 0; padding-bottom: 2px; } /* 줄은 날씨 아래로 */
+.day-top .day-head { border-bottom: 0; padding-bottom: 6px; } /* 굵은 줄은 날씨 아래로 */
+.day-top .day-wx { border-top: 1px solid var(--line); } /* 제목과 날씨 사이 흐린 줄 */
 .day-head .no { font-family: var(--font-display); font-weight: 700; font-size: 40px; line-height: .9; }
 .day-head .no small { font-size: 16px; font-weight: 600; margin-left: 2px; }
 .day-head .info { flex: 1; min-width: 0; }
