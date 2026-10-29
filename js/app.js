@@ -530,7 +530,7 @@
       </div>
       ${moveBar(t, tab)}`;
     document.body.classList.toggle('has-move-bar', !!app.querySelector('.move-bar'));
-    if (tab === 'plan') loadWeather(t);
+    if (tab === 'plan') { fitWx(); loadWeather(t); }
   }
 
   // 체크한 일정을 같은 날 안에서 위아래로 옮기는 아래 막대
@@ -675,6 +675,7 @@
       const keys = Object.keys(wx.days); if (keys.length > 600) keys.sort((a, b) => wx.days[a][4] - wx.days[b][4]).slice(0, keys.length - 600).forEach(k => delete wx.days[k]);
       wxSave();
       app.querySelectorAll('.wx[data-d]').forEach(el => { el.outerHTML = wxSpan(t, el.dataset.d); });
+      fitWx();
     } catch (e) { /* 인터넷이 안 되면 날씨만 빼고 보여요 */ } finally { wxBusy = ''; }
   }
   // 시간별 날씨를 오전(6~11시)·오후(12~17시)·저녁(18~22시)으로: [대표 날씨(가장 궂은 것), 평균 기온, 최고 비 확률]
@@ -693,8 +694,15 @@
     const g = dayLoc(t, d), v = g && wx.days[`${locKey(g)}|${d}`];
     if (!v || v[1] == null) return `<span class="wx" data-d="${d}"></span>`;
     const [icon, label] = wmo(v[0]).slice(1);
-    const parts = (v[5] || []).map((x, k) => x ? `<span class="wx-p"><b>${PARTS[k][0]}</b> ${wmo(x[0])[1]} ${x[1]}°${x[2] >= 30 ? ` <small>${x[2]}%</small>` : ''}</span>` : '').join('');
-    return `<span class="wx" data-d="${d}" title="${g.gps ? '휴대폰 위치' : esc(g.name || '')} 날씨"><span class="wx-sum">${g.gps ? '📍 ' : ''}${icon} ${label} ${Math.round(v[1])}°/${Math.round(v[2])}°${v[3] >= 30 ? ` · 비 ${v[3]}%` : ''}</span>${parts ? `<span class="wx-parts">${parts}</span>` : ''}</span>`;
+    const parts = (v[5] || []).map((x, k) => x ? `<span class="wx-p"><b>${PARTS[k][0]}</b> ${wmo(x[0])[1]} ${x[1]}°${x[2] >= 30 ? `<small class="wx-pp"> ${x[2]}%</small>` : ''}</span>` : '').join('');
+    return `<span class="wx" data-d="${d}" title="${g.gps ? '휴대폰 위치' : esc(g.name || '')} 날씨"><span class="wx-sum">${g.gps ? '📍' : ''}${icon}<span class="wx-lb"> ${label}</span> ${Math.round(v[1])}°/${Math.round(v[2])}°${v[3] >= 30 ? `<span class="wx-pp"> · 비 ${v[3]}%</span>` : ''}</span>${parts}</span>`;
+  }
+  // 날씨는 한 줄로: 넘치면 비 확률 → 날씨 글자(맑음 등) 순서로 빼요
+  function fitWx() {
+    app.querySelectorAll('.day-wx .wx').forEach(el => {
+      el.classList.remove('no-pp', 'no-lb', 'tight');
+      ['no-pp', 'no-lb', 'tight'].forEach(c => { if (el.scrollWidth > el.clientWidth + 1) el.classList.add(c); }); // 그래도 넘치면 글자·간격을 조금 줄여요
+    });
   }
   function planTab(t) {
     const days = tripDays(t);
@@ -1850,6 +1858,7 @@
     render();
   }
   app.addEventListener('focusout', () => setTimeout(flushRemote, 0));
+  window.addEventListener('resize', () => fitWx());
   window.addEventListener('online', () => render());
   window.addEventListener('offline', () => render());
 
