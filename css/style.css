@@ -211,9 +211,11 @@ body::before {
 /* ───── 일차 섹션 & 타임라인 ───── */
 .day { margin-top: 18px; scroll-margin-top: 130px; }
 .day-head { display: flex; align-items: flex-end; gap: 10px; padding-bottom: 8px; border-bottom: 2px solid var(--ink); }
-.tl-item { scroll-margin-top: calc(env(safe-area-inset-top, 0px) + 200px); } /* 위에 붙은 메뉴·일차 제목에 가리지 않게 */
+.tl-item { scroll-margin-top: calc(env(safe-area-inset-top, 0px) + 225px); } /* 위에 붙은 메뉴·일차 제목에 가리지 않게 */
 /* 스크롤해도 지금 보고 있는 일차 제목이 탭 메뉴 바로 아래에 붙어 있어요 (탭 메뉴 높이 48px) */
-.day-head { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 64px + 48px); z-index: 3; background: var(--bg); padding-top: 6px; }
+.day-head { padding-top: 6px; }
+/* 일차 제목과 날씨 줄이 함께 위에 붙어 있어요 */
+.day-top { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 64px + 48px); z-index: 3; background: var(--bg); padding-bottom: 4px; }
 .day-head .no { font-family: var(--font-display); font-weight: 700; font-size: 40px; line-height: .9; }
 .day-head .no small { font-size: 16px; font-weight: 600; margin-left: 2px; }
 .day-head .info { flex: 1; min-width: 0; }
