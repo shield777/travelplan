@@ -606,7 +606,7 @@
   // 여행 중에는 휴대폰 위치(GPS)로 오늘 날씨를 받고, 그날 있었던 위치를 기억해서 지난날도 그 위치 날씨로 남겨요
   // 받은 날씨·위치는 이 기기에만 보관해요 (여행 데이터에는 넣지 않아요)
   const WX_KEY = 'travelplan.wx';
-  const wx = (() => { try { const o = JSON.parse(localStorage.getItem(WX_KEY)) || {}; return { geo: o.geo || {}, days: o.days || {}, loc: o.loc || {} }; } catch (e) { return { geo: {}, days: {}, loc: {} }; } })();
+  const wx = (() => { try { const o = JSON.parse(localStorage.getItem(WX_KEY)) || {}; return { geo: o.geo || {}, days: o.days || {}, loc: o.loc || {}, rev: o.rev || {} }; } catch (e) { return { geo: {}, days: {}, loc: {}, rev: {} }; } })();
   const wxSave = () => { try { localStorage.setItem(WX_KEY, JSON.stringify(wx)); } catch (e) { /* 무시 */ } };
   const WMO = [[[0], '☀️', '맑음'], [[1], '🌤️', '대체로 맑음'], [[2], '⛅', '구름 조금'], [[3], '☁️', '흐림'], [[45, 48], '🌫️', '안개'],
     [[51, 53, 55, 56, 57], '🌦️', '이슬비'], [[61, 63, 66], '🌧️', '비'], [[65, 67], '🌧️', '강한 비'], [[71, 73, 75, 77, 85, 86], '🌨️', '눈'],
@@ -650,6 +650,17 @@
       p => { gpsAt = Date.now(); gpsPos = { lat: p.coords.latitude, lon: p.coords.longitude, gps: true }; res(gpsPos); },
       () => res(null), { enableHighAccuracy: false, timeout: 10000, maximumAge: 1800000 }));
   }
+  // 휴대폰 위치의 지역 이름 (BigDataCloud 무료, 키 없음). 좌표 단위로 기억해요. 못 찾으면 ''
+  async function placeName(g) {
+    const k = locKey(g);
+    if (has(wx.rev, k)) return wx.rev[k];
+    try {
+      const r = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${g.lat}&longitude=${g.lon}&localityLanguage=ko`).then(x => x.json());
+      const name = String((r && (r.city || r.locality || r.principalSubdivision)) || '').slice(0, 30);
+      if (name) { wx.rev[k] = name; wxSave(); }
+      return name;
+    } catch (e) { return ''; }
+  }
   let wxBusy = '';
   async function loadWeather(t) {
     const r = wxRange(t); if (!r || wxBusy === t.id || !navigator.onLine) return;
@@ -658,9 +669,13 @@
       const today = todayStr();
       if (today >= t.startDate && today <= t.endDate) { // 여행 중: 오늘 위치 기록 (오늘이 지나도 그 위치로 남아요)
         const p = await gps();
-        if (p) { wx.loc[t.id] = wx.loc[t.id] || {}; wx.loc[t.id][today] = p; wxSave(); }
+        if (p) {
+          if (!p.name) p.name = await placeName(p);
+          wx.loc[t.id] = wx.loc[t.id] || {}; wx.loc[t.id][today] = { ...p }; wxSave();
+        }
       }
       await wxGeo(t);
+      for (const p of Object.values(wx.loc[t.id] || {})) if (!p.name) { p.name = await placeName(p); if (p.name) wxSave(); }
       // 위치가 같은 날끼리 묶어서 받아요. 지난날은 한 번 받으면 그대로, 오늘·앞으로는 1시간마다 새로
       const groups = {};
       for (let d = r[0]; d <= r[1]; d = addDays(d, 1)) {
@@ -698,7 +713,8 @@
     if (!v || v[1] == null) return `<span class="wx" data-d="${d}"></span>`;
     const [icon, label] = wmo(v[0]).slice(1);
     const parts = (v[5] || []).map((x, k) => x ? `<span class="wx-p"><b>${PARTS[k][0]}</b> ${wmo(x[0])[1]} ${x[1]}°${x[2] >= 30 ? `<small class="wx-pp"> ${x[2]}%</small>` : ''}</span>` : '').join('');
-    return `<span class="wx" data-d="${d}" title="${g.gps ? '휴대폰 위치' : esc(g.name || '')} 날씨"><span class="wx-sum">${g.gps ? '📍' : ''}${icon}<span class="wx-lb"> ${label}</span> ${Math.round(v[1])}°/${Math.round(v[2])}°${v[3] >= 30 ? `<span class="wx-pp"> · 비 ${v[3]}%</span>` : ''}</span>${parts}</span>`;
+    const at = g.name || (g.gps && d === todayStr() ? '현재 위치' : '');
+    return `<span class="wx" data-d="${d}" title="${g.gps ? '휴대폰 위치' : '여행지'} 날씨${at ? ' · ' + esc(at) : ''}"><span class="wx-sum">${at || g.gps ? `<span class="wx-at">${g.gps ? '📍' : ''}${esc(at)}</span> ` : ''}${icon}<span class="wx-lb"> ${label}</span> ${Math.round(v[1])}°/${Math.round(v[2])}°${v[3] >= 30 ? `<span class="wx-pp"> · 비 ${v[3]}%</span>` : ''}</span>${parts}</span>`;
   }
   // 날씨는 한 줄로: 넘치면 비 확률 → 날씨 글자(맑음 등) 순서로 빼요
   function fitWx() {
