@@ -103,12 +103,11 @@
   function tripsCol(fam) { return db.collection('families').doc(fam).collection('trips'); }
   // 링크로 보는 사람용 사본 (로그인 없이 문서 번호를 아는 사람만 읽어요, firestore.rules)
   function pubCol(fam) { return db.collection('families').doc(fam).collection('public'); }
-  // 링크가 퍼져도 안전하게: 항공 예약번호·숙소 예약번호·경비는 빼요
+  // 링크가 퍼져도 안전하게: 항공 예약번호·숙소 예약번호는 빼요 (경비는 보여 줘요)
   function publicCopy(t) {
     const c = payload(t);
     (c.flights || []).forEach(f => { f.pnr = ''; });
     (c.stays || []).forEach(s => { s.confirmNo = ''; });
-    c.expenses = [];
     return c;
   }
   function publish(t) {
