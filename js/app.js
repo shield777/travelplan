@@ -2147,7 +2147,7 @@
           if (t.cloud) {
             fs.innerHTML = `<div class="fam-on">${ICON.cloud}<b>링크로 공유 중</b></div>
               <p class="note-small" style="margin:0">링크를 받은 사람은 <b>누구나 볼 수 있어요</b> (로그인 없이, 일정을 바꾸면 자동으로 반영). <b>고치기</b>는 그룹을 만든 사람과 <b>수정 권한을 받은 멤버</b>만 로그인해서 할 수 있어요.</p>
-              <p class="note-small" style="margin:0">링크로 보는 사람에게는 <b>항공 예약번호·숙소 예약번호·경비</b>가 보이지 않아요.</p>
+              <p class="note-small" style="margin:0">링크로 보는 사람에게는 <b>항공 예약번호·숙소 예약번호</b>는 보이지 않아요. 경비는 보여요.</p>
               <div class="fam-row"><input type="text" id="f-link" readonly value="${esc(famLink(t))}" aria-label="공유 링크"><button type="button" class="btn" id="f-copy">복사</button></div>
               <div class="fam-row"><button type="button" class="btn primary" id="f-send">${ICON.share}카톡으로 보내기</button>${locked(t) ? '' : '<button type="button" class="btn sm ghost" id="f-off">공유 끄기</button>'}</div>
               <div class="ap-preview" id="f-msg" style="color:var(--warn)"></div>
