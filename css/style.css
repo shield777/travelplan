@@ -228,6 +228,8 @@ body::before {
 .wx-sum, .wx-p { white-space: nowrap; flex: none; }
 .wx.no-pp .wx-pp, .wx.no-lb .wx-lb { display: none; }
 .wx.tight { gap: 6px; font-size: 12px; letter-spacing: -.02em; }
+.wx-at { font-weight: 600; color: var(--ink); display: inline-block; max-width: 8em; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+.wx.tight .wx-at { max-width: 5.5em; }
 .wx-p b { font-weight: 600; color: var(--ink); font-size: 12px; }
 .wx-p small { color: var(--accent); font-size: 11px; }
 .day-head .title { font-weight: 700; font-size: 16px; line-height: 1.3; cursor: pointer; overflow-wrap: anywhere; }
