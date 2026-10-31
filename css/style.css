@@ -633,3 +633,11 @@ body.sheet-open { position: fixed; left: 0; right: 0; overflow: hidden; } /* 창
   #print-root { display: block !important; }
   .report { width: auto; }
 }
+
+/* 좁은 아이폰(375pt 이하)에서 첫 화면 위쪽 버튼이 한 줄에 들어가게 */
+.brand { white-space: nowrap; }
+@media (max-width: 389px) {
+  .topbar { gap: 4px; }
+  .topbar .btn.sm:not(.icon) { padding: 0 9px; }
+  .topbar .btn.icon.sm { width: 34px; }
+}
