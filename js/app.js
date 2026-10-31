@@ -426,7 +426,6 @@
         <header class="topbar">
           <div class="grow brand">여행일정</div>
           ${window.TPCloud ? `<button class="btn icon sm fam-btn ${famDot()}" data-act="family" aria-label="멤버와 함께 쓰기">${ICON.users}</button>` : ''}
-          <a class="btn icon sm" href="flights.html" aria-label="최저가 항공권" title="최저가 항공권">✈️</a>
           <button class="btn sm" data-act="backup">불러오기</button>
           <button class="btn primary sm" data-act="new-trip">${ICON.plus}새 여행</button>
         </header>
